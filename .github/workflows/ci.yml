@@ -38,6 +38,10 @@ jobs:
         run: |
           npm install --no-save --no-package-lock playwright
           npx playwright install --with-deps chromium
+      - name: Directed-fixture assertion regressions
+        env:
+          CHECKPACK_REGRESSION_REQUIRE_BROWSER: "1"
+        run: node --test test/checkpack-regression.test.mjs
       - name: Validate every pack
         run: node tools/check-pack.mjs
 
@@ -60,5 +64,9 @@ jobs:
         run: |
           npm install --no-save --no-package-lock playwright
           npx playwright install chromium
+      - name: Directed-fixture assertion regressions
+        env:
+          CHECKPACK_REGRESSION_REQUIRE_BROWSER: "1"
+        run: node --test test/checkpack-regression.test.mjs
       - name: Validate every pack on Windows
         run: node tools/check-pack.mjs --desktop
