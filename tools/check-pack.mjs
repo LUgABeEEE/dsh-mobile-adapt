@@ -25,7 +25,7 @@
  *                values must fall back to the no-pack baseline.
  *   fixture     — an optional `packs/<id>/fixture.html` replaces the built-in
  *                fixture for all rounds; when absent the built-in fixture is used
- *                and the report says so. Contract: docs/收录标准.md §10.
+ *                and the report says so. Contract: docs/定向-fixture.md.
  *
  * `--json` prints one machine-readable object instead of the tables. Any failed
  * assertion exits 1; usage errors exit 2.
@@ -371,9 +371,12 @@ function inspectFixture(report) {
   const info = { kind: 'custom', path: relative, bytes: bytes.byteLength, source: null, loadable: false }
   report.fixture = { kind: 'custom', path: relative, bytes: bytes.byteLength }
 
+  let sizeOk = true
   if (bytes.byteLength === 0) {
+    sizeOk = false
     report.fail('static', 'static.fixture.size', `${FIXTURE_FILE} 是空文件`)
   } else if (bytes.byteLength > FIXTURE_LIMIT) {
+    sizeOk = false
     report.fail('static', 'static.fixture.size', `${FIXTURE_FILE} 超过 256 KB（${bytes.byteLength} 字节）`)
   } else {
     report.pass('static', 'static.fixture.size', `${FIXTURE_FILE} ${bytes.byteLength} 字节（≤ 256 KB）`)
@@ -394,28 +397,33 @@ function inspectFixture(report) {
 
   // A fixture is DOM + inline style only: check-pack injects the pack's own
   // mobile.css/mobile.js, so a fixture that ships scripts would bypass the
-  // activation shim (and could do anything in an authenticated page).
-  const scriptMatch = source.match(/<(?:script|iframe|object|embed)\b/i)
+  // activation shim (and could do anything in an authenticated page). Inline
+  // event handlers and javascript: URLs are script too — a `<svg onload>` is
+  // enough to run code, so they are rejected alongside <script>.
+  const scriptMatch = source.match(/<(?:script|iframe|object|embed)\b|\bon[a-z]+\s*=|\bjavascript\s*:/i)
   if (scriptMatch !== null) {
-    report.fail('static', 'static.fixture.no-script', `${FIXTURE_FILE} 不得包含 ${scriptMatch[0]}：脚本由 check-pack 注入，fixture 只放 DOM 与内联样式`)
+    report.fail('static', 'static.fixture.no-script', `${FIXTURE_FILE} 含可执行内容（${scriptMatch[0].trim()}）：脚本/事件处理属性/javascript: URL 都由 check-pack 注入链路之外执行，fixture 只放 DOM 与内联样式`)
   } else {
-    report.pass('static', 'static.fixture.no-script', `${FIXTURE_FILE} 不含 <script>/<iframe>/<object>/<embed>`)
+    report.pass('static', 'static.fixture.no-script', `${FIXTURE_FILE} 不含 <script>/<iframe>/<object>/<embed>、内联事件处理属性（on*=）或 javascript: URL`)
   }
 
-  const external = source.match(/\b(?:src|href)\s*=|@import\b|\burl\s*\(|https?:\/\//i)
+  // Resource-bearing attributes are checked independently of the element name:
+  // `<img srcset="data:…">`, `<form action=…>`, `<video poster=…>` and
+  // `<iframe srcdoc=…>` all load or execute content without a `<script>` tag.
+  const external = source.match(/\b(?:src|href|srcset|poster|action|formaction|srcdoc|http-equiv|xlink\s*:\s*href)\s*=|@import\b|\burl\s*\(|https?:\/\/|\bdata\s*:/i)
   if (external !== null) {
-    report.fail('static', 'static.fixture.no-external', `${FIXTURE_FILE} 引用了外部资源（${external[0]}）：fixture 必须自包含，不得联网或加载脚本/样式`)
+    report.fail('static', 'static.fixture.no-external', `${FIXTURE_FILE} 引用了外部/内联数据资源（${external[0].trim()}）：src/href/srcset/poster/action/formaction/srcdoc/http-equiv/xlink:href、@import/url()/http(s)/data: 均不允许，fixture 必须自包含`)
   } else {
-    report.pass('static', 'static.fixture.no-external', `${FIXTURE_FILE} 不含 src=/href=/@import/url()/http(s) 引用`)
+    report.pass('static', 'static.fixture.no-external', `${FIXTURE_FILE} 不含 src/href/srcset/poster/action/formaction/srcdoc/http-equiv/xlink:href 属性，也不含 @import/url()/http(s)/data: 引用`)
   }
 
-  info.loadable = scriptMatch === null && external === null && missing.length === 0 && hasNul === false
+  info.loadable = sizeOk === true && scriptMatch === null && external === null && missing.length === 0 && hasNul === false
   return info
 }
 
 /**
  * Parse the custom fixture in a real (offline) browser and check the minimal DOM
- * contract from docs/收录标准.md §11. Runs before the pack is injected, so the
+ * contract from docs/定向-fixture.md. Runs before the pack is injected, so the
  * fixture never executes pack code during this step.
  */
 async function inspectFixtureInBrowser(report, browser, fixture) {
@@ -443,7 +451,7 @@ async function inspectFixtureInBrowser(report, browser, fixture) {
     } else {
       const missing = [...state.missing]
       if (state.panelRoot === false) missing.push('[data-slot="main"] > *')
-      report.fail('static', 'static.fixture.structure', `定向 fixture 缺少契约要求的元素：${missing.join(' / ')}（见 docs/收录标准.md §11）`)
+      report.fail('static', 'static.fixture.structure', `定向 fixture 缺少契约要求的元素：${missing.join(' / ')}（见 docs/定向-fixture.md）`)
     }
   } catch (error) {
     report.fail('static', 'static.fixture.parse', `定向 fixture 无法解析：${error instanceof Error ? error.message : String(error)}`)
@@ -1421,7 +1429,7 @@ function usage() {
     '用法：node tools/check-pack.mjs [packs/<id> ...] [--json] [--desktop]',
     '',
     '  packs/<id>   要校验的包目录（可多个；缺省校验 packs/ 下全部非下划线目录）',
-    '  packs/<id>/fixture.html  可选：存在时替代内置 fixture（见 docs/收录标准.md §11）',
+    '  packs/<id>/fixture.html  可选：存在时替代内置 fixture（见 docs/定向-fixture.md）',
     '  --json       输出机器可读 JSON（stdout 只有 JSON）',
     '  --desktop    额外断言桌面严格零回归（mainContent 盒模型与全部控件矩形）',
   ].join('\n')
