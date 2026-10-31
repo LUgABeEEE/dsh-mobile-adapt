@@ -5,6 +5,14 @@
 
 ## [Unreleased]
 
+### Changed（0.3.4）
+
+- `dsh.client.inject: ["@deepseek-ai/dsh-client-ui-slots"]`：显式声明用到的客户端服务（与 `dsh-skills-manager` 同款）。
+- `engines.dsh: ">=0.2.1-rc.2 <0.3.0"`：把支持的宿主版本写进清单，别让宿主靠猜。
+
+验证：在 **rc.5** 的隔离副本（完整 profile 克隆，端口 3103）里，0.3.3 / 0.3.4 都能 boot 成功、无 `entry did not activate`；
+而**干净的 0.3.1**（缺 `immediately`）在同样环境里稳定复现 `dsh-adapt-packs: failed`。这就是 22:38 那次故障的根因。
+
 ### Fixed（0.3.3）
 
 - `dsh.client.immediately: true`：只带设置面板的客户端模块必须随 boot 注入。缺这一项时模块会被推迟，浏览器侧把条目判成 `dsh-adapt-packs: failed`（这就是 22:38 那次「服务器拉不起来、插件 fail」的真正原因）。回归测试锁住这个字段。

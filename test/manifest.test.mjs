@@ -15,6 +15,10 @@ test('package.json declares a complete dsh bundle', () => {
   // A settings-only client must be injected at boot; without this the module is
   // deferred and the browser reports the entry as failed.
   assert.equal(pkg.dsh.client.immediately, true)
+  // Declare the client service we actually use; without it the module can be
+  // applied before the slots service exists.
+  assert.deepEqual(pkg.dsh.client.inject, ['@deepseek-ai/dsh-client-ui-slots'])
+  assert.match(pkg.engines.dsh, /0\.2\.1-rc\.2/)
   assert.equal(existsSync(join(ROOT, pkg.dsh.bundle.patch)), true)
   assert.equal(pkg.main, 'lib/index.mjs')
   assert.equal(pkg.exports['./client'], './lib/client.js')

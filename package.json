@@ -1,6 +1,6 @@
 {
   "name": "dsh-adapt-packs",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "type": "module",
   "description": "Opt-in adaptation packs for the DSH mobile surface (a host-aware 44px touch floor, icon-button width, width reclaim, floating-widget clearance) plus a compatibility list of third-party plugins on a phone.",
   "license": "MIT",
@@ -50,7 +50,8 @@
     "LICENSE"
   ],
   "engines": {
-    "node": ">=20"
+    "node": ">=20",
+    "dsh": ">=0.2.1-rc.2 <0.3.0"
   },
   "publishConfig": {
     "access": "public"
@@ -68,7 +69,10 @@
     },
     "client": {
       "platform": "web",
-      "immediately": true
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-slots"
+      ]
     }
   }
 }
