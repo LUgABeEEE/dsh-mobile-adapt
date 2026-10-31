@@ -42,7 +42,7 @@ fixture 要复刻 dsh-mobile 的外壳骨架，并包含被断言能力需要的
 
 ## 4. 示例
 
-`docs/examples/fixture-pack/` 是一个可运行的最小样例（**不收录、不在 `packs/` 下**，默认扫描不会包含它），覆盖 `hit-target` / `rail-clearance` / `width-reclaim` / `shell-hit-target` / `floater-clearance` 五组断言：
+`docs/examples/fixture-pack/` 是一个可运行的最小样例（**不收录、不在 `packs/` 下**，默认扫描不会包含它），覆盖 `hit-target` / `width-reclaim` / `shell-hit-target` / `floater-clearance` 四组断言（`rail-clearance` 已于 2026-10-31 退役，理由见 `收录标准.md` §4）：
 
 ```bash
 node tools/check-pack.mjs docs/examples/fixture-pack --desktop

@@ -20,7 +20,7 @@
 |---|---|---|
 | `extension.json` | 是 | **只能 5 个字段**：`schemaVersion`（必须 `1`）、`id`、`name`、`version`、`description`。多一个字段整包被拒（`src/extensions.ts`）。`id` 必须等于目录名，匹配 `^[a-z][a-z0-9-]{0,63}$`，且 `extension.json` ≤ 64 KB |
 | `mobile.css` | 可选 | 纯样式包的唯一产物；≤ 512 KB；选择器必须收敛到目标面板，必须实现 opt-out |
-| `mobile.js` | 可选 | ≤ 1 MB；只做宿主替不了的事（打 `data-dsh-panel`、MutationObserver、折叠顶栏按钮）；必须 `window.dshMobile.define` |
+| `mobile.js` | 可选 | ≤ 1 MB；只做宿主替不了的事（打**自己命名**的面板状态属性、MutationObserver、量值）；必须 `window.dshMobile.define`。**不要写宿主的 `data-dsh-panel`**（dsh-mobile #319 起由宿主维护），需要面板状态时用 `data-dshm-adapt-panel` 这类自有属性 |
 | `fixture.html` | 可选（定向 pack 建议有） | 只给 `check-pack` 用的定向 DOM：≤ 256 KB、完整 HTML、只放 DOM + 内联 `<style>`、不得有脚本/事件处理属性/外链/`data:` 资源。存在时替代内置 fixture 跑全部运行时断言；契约见 `docs/定向-fixture.md` |
 | `README.md` | 是 | 就是本文件；目标插件、宿主标记、opt-out、回滚、真机验证、截图 |
 | `shots/` | 是（收录时） | before / after PNG，不参与运行时 |
@@ -54,8 +54,8 @@ window.dshMobile.define({
 只勾**真的做了**的能力（登记在 `catalog.json` 的 `capabilities`，逐条对应断言见 `docs/收录标准.md`）：
 
 - [ ] `hit-target` —— 粗指针下面板内 `button / select / input` ≥ 44px
+  - 若规则以宿主的 `data-dsh-panel` 为门阀（只在宿主没有 #319 地板时兜底），`check-pack` 会额外跑 host-probe，断言门阀真的退让、且 shim 不改写宿主属性。
 - [ ] `width-reclaim` —— 面板根不横向溢出（左右缘都在视口内）
-- [ ] `rail-clearance` —— 面板让开折叠轨道（≤ 64px；与 ≤720px 外壳「保持覆盖」的意图不同，必须显式声明）
 - [ ] `chrome-collapse` —— `data-dsh-chrome="header"` 折叠顶栏
 - [ ] `notice-collapse` —— `data-dsh-chrome="notice"` 折成一行且可展开
 - [ ] `scroll-owner` —— 面板状态主区可滚，不夺插件自己的滚动

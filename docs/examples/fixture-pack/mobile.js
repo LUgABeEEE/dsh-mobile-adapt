@@ -1,8 +1,8 @@
 /* fixture-pack · 示例包的 mobile.js
  *
- * 只做宿主替不了的两件事：把“面板是否打开”和折叠轨道宽度写到 DOM 上，以及
- * 量出定向 fixture 里 [data-fixture="floater"] 占用的高度。完整说明见
- * docs/定向-fixture.md。
+ * 只做宿主替不了的两件事：把「面板是否打开」写成**自己的** data-dshm-example-panel
+ * （不写宿主的 data-dsh-panel——dsh-mobile #319 起由宿主维护），以及量出定向
+ * fixture 里 [data-fixture="floater"] 占用的高度。完整说明见 docs/定向-fixture.md。
  */
 window.dshMobile.define({
   apiVersion: 1,
@@ -20,15 +20,8 @@ window.dshMobile.define({
 
       const optedOut = typeof root.closest === 'function' && root.closest('[data-dsh-adapt="off"]') !== null
       const hasNav = main.querySelector('.dshm-panelNav') !== null
-      main.setAttribute('data-dsh-panel', hasNav === true && optedOut === false ? '1' : '0')
+      main.setAttribute('data-dshm-example-panel', hasNav === true && optedOut === false ? '1' : '0')
 
-      const drawer = doc.querySelector('.dshm-drawer')
-      let rail = 0
-      if (optedOut === false && drawer !== null && drawer.getAttribute('data-open') !== 'true') {
-        const width = Math.round(drawer.getBoundingClientRect().width)
-        rail = width > 0 ? Math.min(width, 64) : 0
-      }
-      main.style.setProperty('--dshm-rail', `${rail}px`)
 
       const floater = doc.querySelector('[data-fixture="floater"]')
       if (optedOut === false && floater !== null) {

@@ -2,7 +2,7 @@
 
 **Opt-in adaptation packs for the DSH mobile surface.**
 
-Third-party plugin panels on a phone have three problems a plugin cannot fix from inside its own component: touch targets a thumb cannot hit, content crowded against the collapsed navigation rail, and rows hidden underneath a floating widget. This repository is a small registry of fixes for exactly those, delivered as packs that `dsh-mobile` loads through its public `extensions/` directory.
+Third-party plugin panels on a phone have three problems a plugin cannot fix from inside its own component: touch targets a thumb cannot hit, a panel root wider than the phone's content box, and rows hidden underneath a floating widget. This repository is a small registry of fixes for exactly those, delivered as packs that `dsh-mobile` loads through its public `extensions/` directory.
 
 Nothing here forks or patches an installed DSH or dsh-mobile. A pack is a directory:
 
@@ -20,8 +20,8 @@ Copy it in and the host picks it up within two seconds; move it out and it is go
 
 | pack | scope | what it does |
 | --- | --- | --- |
-| [`core-panel`](packs/core-panel/) | plugin panels | 44px floor inside a panel (including icon-only buttons), width reclaim, clearance for the 56px collapsed rail |
-| [`shell-chrome`](packs/shell-chrome/) | the shell itself | the panel's "back to conversation" bar and the open drawer's sidebar rows |
+| [`core-panel`](packs/core-panel/) | plugin panels | 44px hit floor inside a panel — the only source on 0.8.x, and a fallback that backs off once the host ships its own floor (#319); icon-only button width; width reclaim |
+| [`shell-chrome`](packs/shell-chrome/) | the shell itself | the open drawer's sidebar rows (36 → 44px); the "back to conversation" bar becomes a rise-only floor that never shrinks the host's own 48px |
 | [`floaters`](packs/floaters/) | floating widgets | measures bottom-right fixed widgets, reserves their height, so the last rows stop hiding underneath |
 
 Every pack is **experimental** and **off by default**. `catalog.json` records, per pack, what has actually been verified and what has not — the `evidence` field is meant to be read before trusting one.
@@ -99,9 +99,24 @@ Each pack stops applying entirely — panel spacing returns to its own values, s
 | --- | --- |
 | Fixture measurement: 390×844 coarse pointer, 1280×800 fine pointer zero-regression, opt-out | ✅ every pack (`node tools/check-pack.mjs`) |
 | Fixture measurement on Windows 11 + Chromium (`node tools/check-pack.mjs --desktop`) | ✅ every pack: 87 passed / 0 failed / 8 skipped (2026-10-31); the same suite runs in CI on `windows-latest` |
-| Real runtime on **dsh-mobile 0.7.1** | ✅ measured on a real gateway |
-| Real runtime on **0.8.0** | ❌ text-level check of `lib/mobile-layout.js` only |
+| Real runtime on **dsh-mobile 0.8.0** | ✅ measured on the real gateway (390×844, coarse pointer, Plugins panel) — see `实测-0.8.0-20261031.md` in the workspace |
+| Real runtime on **main after #319** | ❌ no build contains it yet (v0.8.1 does not exist); merge diff + a `check-pack` host-probe only |
+| Real runtime on **0.7.1** | ✅ historically (2026-10-31 earlier run); its numbers matched 0.8.0 |
 | Physical device | ❌ never — no thumb, no soft keyboard, no real `env(safe-area-inset-*)` |
+
+### Two release lines: 0.8.0 vs main (#319)
+
+`dsh-mobile` merged #319 on 2026-10-31 (`6c50b13`), **after** v0.8.0 was published (2026-10-30). No release contains it yet:
+
+| | release 0.8.0 | main after #319 |
+| --- | --- | --- |
+| host writes `data-dsh-panel` | **no** (grep: 0 hits) | yes, on `.dshm-main` |
+| 44px hit floor for plugin panel controls | **no** (94/94 controls < 44px measured) | yes, host-provided |
+| panel root width clamp | no | yes |
+| icon-only button `min-width` | no | **no** |
+| bottom safe area on panel pages | no | **no** |
+
+`core-panel` therefore gates its height floor and width clamp on `.dshm-main:not([data-dsh-panel])`: on 0.8.x it is the only source, and on a host that owns that attribute it steps aside instead of duplicating (and never writes the host's attribute — it keeps its own `data-dshm-adapt-panel`). `check-pack` proves the gate with a simulated host-owned attribute (`runtime.hostGate.*`).
 
 That is why the packs stay `experimental` rather than `candidate`. Measuring is a separate problem, and there is a tool for it: [`dsh-ui-lab`](https://github.com/LUgABeEEE/dsh-ui-lab) opens a DSH surface at real device proportions, captures a panel, and gates a matrix run on a pixel diff.
 

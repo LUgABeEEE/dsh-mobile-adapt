@@ -1,9 +1,11 @@
 # fixture-pack（示例，不收录）
 
 这个目录**不是**一张要收录的适配包，而是 `packs/<id>/fixture.html`（定向 fixture）能力的
-可运行样例。它同时覆盖 `hit-target` / `rail-clearance` / `width-reclaim` /
-`shell-hit-target` / `floater-clearance` 五组断言，用来证明：定向到具体第三方插件时，
-pack 可以在自己的 DOM 上跑完整的运行时校验，而不是只在通用 fixture 上过静态层。
+可运行样例。它同时覆盖 `hit-target` / `width-reclaim` / `shell-hit-target` /
+`floater-clearance` 四组断言（`rail-clearance` 已于 2026-10-31 退役），用来证明：
+定向到具体第三方插件时，pack 可以在自己的 DOM 上跑完整的运行时校验，而不是只在通用
+fixture 上过静态层。它把自己的面板状态写成 `data-dshm-example-panel`——宿主的
+`data-dsh-panel` 只读不写。
 
 ```bash
 node tools/check-pack.mjs docs/examples/fixture-pack --desktop

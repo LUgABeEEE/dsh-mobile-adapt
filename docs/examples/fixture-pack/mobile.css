@@ -2,20 +2,21 @@
  *
  * 只做示例所需的最小适配，全部选择器都落在 check-pack 允许的作用域里：
  * - `@media (pointer: coarse)` 内的规则；
- * - 含 `[data-dsh-panel="1"]` 的规则；
+ * - 含**自己命名**的面板状态 `[data-dshm-example-panel="1"]` 的规则
+ *   （宿主的 `data-dsh-panel` 只读，不写）；
  * - 含 `[data-dsh-adapt="off"]` 的 opt-out 规则。
  * 不允许 `:has()`、第三方类名、@import/url()。
  */
 
 @media (pointer: coarse) {
   /* 面板内触控地板（示例只做高度 + 按钮宽度）。 */
-  .dshm-main[data-dsh-panel="1"] [data-slot="main"] :where(button, [role="button"], select) {
+  .dshm-main[data-dshm-example-panel="1"] [data-slot="main"] :where(button, [role="button"], select) {
     min-height: 44px !important;
   }
-  .dshm-main[data-dsh-panel="1"] [data-slot="main"] :where(button, [role="button"]):not([role="switch"]):not([role="checkbox"]) {
+  .dshm-main[data-dshm-example-panel="1"] [data-slot="main"] :where(button, [role="button"]):not([role="switch"]):not([role="checkbox"]) {
     min-width: 44px !important;
   }
-  .dshm-main[data-dsh-panel="1"] [data-slot="main"] :where(input:not([type="checkbox"]):not([type="radio"]), textarea) {
+  .dshm-main[data-dshm-example-panel="1"] [data-slot="main"] :where(input:not([type="checkbox"]):not([type="radio"]), textarea) {
     min-height: 44px !important;
   }
 
@@ -38,12 +39,10 @@
   }
 }
 
-/* 窄屏让开 56px 折叠轨道。 */
+/* 窄屏宽度回收：100vw / 固定像素宽的插件根收回剩余宽度。
+ * （rail-clearance 已退役：0.8.0 上折叠轨道在面板态不可见，没有让位场景。） */
 @media (max-width: 720px) {
-  .dshm-main[data-dsh-panel="1"] .dshm-mainContent {
-    padding-left: var(--dshm-rail, 56px);
-  }
-  .dshm-main[data-dsh-panel="1"] [data-slot="main"] > * {
+  .dshm-main[data-dshm-example-panel="1"] [data-slot="main"] > * {
     max-width: 100%;
     box-sizing: border-box;
   }

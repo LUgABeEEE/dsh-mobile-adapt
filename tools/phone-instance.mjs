@@ -252,12 +252,11 @@ if (pack !== undefined) {
     return {
       styleNode: style !== null,
       styleRules: style === null ? 0 : (style.sheet?.cssRules?.length ?? 0),
-      panelAttr: main?.getAttribute('data-dsh-panel') ?? null,
-      railVar: getComputedStyle(document.querySelector('.dshm-mainContent') ?? document.documentElement)
-        .getPropertyValue('--dshm-rail').trim(),
+      panelAttr: main?.getAttribute('data-dshm-adapt-panel') ?? null,
+      hostPanelAttr: main?.getAttribute('data-dsh-panel') ?? null,
     }
   })
-  console.log(`  pack: style=${probe.styleNode} rules=${probe.styleRules} data-dsh-panel=${probe.panelAttr} rail=${probe.railVar || '(unset)'}`)
+  console.log(`  pack: style=${probe.styleNode} rules=${probe.styleRules} data-dshm-adapt-panel=${probe.panelAttr ?? '(unset)'} data-dsh-panel(host)=${probe.hostPanelAttr ?? '(unset)'}`)
 }
 
 if (flag('measure')) {

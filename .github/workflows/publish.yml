@@ -51,6 +51,11 @@ jobs:
       # prepublishOnly during npm publish.
       - run: node tools/cli.mjs list
 
+      - name: The token must authenticate
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm whoami
+
       - name: Publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

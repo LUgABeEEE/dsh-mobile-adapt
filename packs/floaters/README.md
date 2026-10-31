@@ -6,13 +6,13 @@
 `position: fixed` + 高 z-index，**压在插件面板的最后几行上**。面板自己滚动，滚到底也
 还是被盖住 —— 最后一条既看不到、也点不到。
 
-真实测量（dsh-mobile 0.7.1，390×844，Global todos 面板）：
+真实测量（dsh-mobile **0.8.0**，390×844，Plugins 面板，2026-10-31；0.7.1 的旧数字相同）：
 
 | | |
 |---|---|
-| 浮动控件 | `268,722 → 390,844`，高 **122px**，`z-index: 9999` |
-| 面板底部 | y=844（被压 122px） |
-| 滚到底 | 仍停在 y=844，最后一行始终在控件下面 |
+| 浮动控件 | `dsh-whale-widget`，`268,722 → 390,844`，高 **122px**，`z-index` 高于面板 |
+| 宿主 | 纯宿主 `.dshm-mainContent` 是 `overflow:hidden`（`lib/mobile-layout.js:417`），面板根滚到 844 就结束 |
+| 结果 | 滚到底仍停在 y=844，最后一行始终在控件下面；`elementFromPoint(330,784)` 命中控件 |
 
 ## 做法：留位置，不搬别人的控件
 
@@ -24,6 +24,10 @@
 2. `mobile.css` 把这个值变成面板根的 `margin-bottom`，并让 `.dshm-mainContent` 可滚 —— 于是
    末尾内容能再往上滚 122px，停在控件上方；
 3. 没有悬浮控件的页面，`data-dsh-floaters` 不存在，两条规则完全不命中。
+
+量出来的值随页面变化：本机真实页面（三包正常加载）= **122px**；如果只开 floaters、宿主因为
+扩展没加载完弹出自己的 “Mobile customization could not be loaded” 提示条，那条提示也是贴底
+fixed、不在 `.dshm-shell` 里，会被算进让位量（实测 **159px**）。生产口径取 122px。
 
 **为什么用 margin 不用 padding**：padding 缩小面板自身的内容盒，列表一次少看一百多像素
 （实测 273px → 153px）；margin 是往外要空间，由外层滚动吸收，**列表视口尺寸不变**，
@@ -62,15 +66,22 @@ fixture 里放了一个 112×118 的右下角固定控件，断言四条：
 | `runtime.floater.gap` | 面板根 `margin-bottom` ≥ 控件高度 |
 | `runtime.floater.reach` | 滚到底后**面板底部 ≤ 控件顶部**（真的让开了，不只是数字对） |
 
-## 真实运行时取证（0.7.1，2026-10-31）
+## 真实运行时取证（0.8.0，2026-10-31）
 
 | 观察项 | 结果 |
 |---|---|
 | 注入 | `style[data-dsh-mobile-extension-style]` = `core-panel` + `floaters` + `shell-chrome` |
-| 量测 | `--dshm-floaters = 122px`（真实 `dshwv-root` 的高度），`data-dsh-floaters="1"` |
-| 应用 | 面板根 `margin-bottom: 122px`，`mainContent overflow-y: auto`，可滚 |
+| 量测 | `--dshm-floaters = 122px`（`dsh-whale-widget` 的高度），`data-dsh-floaters="1"` |
+| 应用 | 面板根 `margin-bottom: 122px`，`mainContent overflow-y: auto` |
+| 滚动余量 | `mainContent` client 788 / scroll **910**（正好多出 122px；纯宿主是 787/787 hidden） |
 | 滚到底 | 面板底部 y=**722** == 控件顶部 y=**722**，不再重叠 |
 | opt-out | `--dshm-floaters` 清空、标记移除、`margin-bottom: 0px`、`overflow-y: hidden` |
 
-0.8.0 未在该版本上跑过；真机指纹级验证（iOS Safari / Android WebView 的 `visualViewport`
-与软键盘弹出）仍未做 —— 悬浮控件在键盘弹出时的位置变化不在本包断言范围内。
+与 #319（main，未发布）的关系：宿主会在面板态把 `.dshm-main` / `.dshm-mainContent` 设为
+`overflow-y:auto`，与本包第 1 条同值（**不冲突**，本包只是提前一层保险）；本包独有的
+`margin-bottom` 让位、`overscroll-behavior:contain` 与 `-webkit-overflow-scrolling:touch`
+宿主没有。含 #319 的发布版未复测【推断：依据 merge diff】。
+
+真机指纹级验证（iOS Safari / Android WebView 的 `visualViewport` 与软键盘弹出）仍未做 ——
+悬浮控件在键盘弹出时的位置变化不在本包断言范围内。会话态留白只在空会话量过（无视觉位移，
+`mainContent` 844/844），长会话未测。
