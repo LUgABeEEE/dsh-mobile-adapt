@@ -5,6 +5,10 @@
 
 ## [Unreleased]
 
+### CI
+
+- `scripts/check-bundle.mjs`：把 `npm pack` 的产物装进临时 prefix 再验一遍（文件清单、`dsh.client` 三个字段、patch 行、host 导出、CLI 与 4 个包）。CI 与 `prepublishOnly` 都跑。这一层专门防「源码树里有、发布产物里没有」的清单错误。
+
 ### Changed（0.3.4）
 
 - `dsh.client.inject: ["@deepseek-ai/dsh-client-ui-slots"]`：显式声明用到的客户端服务（与 `dsh-skills-manager` 同款）。

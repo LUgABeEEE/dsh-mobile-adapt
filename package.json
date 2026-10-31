@@ -7,9 +7,10 @@
   "scripts": {
     "list": "node tools/cli.mjs list",
     "check": "node tools/check-pack.mjs",
-    "prepublishOnly": "node --test && node tools/cli.mjs list",
+    "prepublishOnly": "node --test && node scripts/check-bundle.mjs",
     "test": "node --test",
-    "verify": "node --test && node tools/cli.mjs list"
+    "verify": "node --test && node scripts/check-bundle.mjs && node tools/cli.mjs list",
+    "check:bundle": "node scripts/check-bundle.mjs"
   },
   "repository": {
     "type": "git",
