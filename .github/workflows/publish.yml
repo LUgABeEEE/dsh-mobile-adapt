@@ -4,10 +4,10 @@
 # workflow_dispatch runs a --dry-run by default so the pipeline can be exercised
 # without touching the registry.
 #
-# Requires the repository secret NPM_TOKEN: a granular access token with
-# "Read and write" publish permission for dsh-adapt-packs (Automation tokens
-# also work). Provenance is signed through GitHub OIDC, so no other secret is
-# needed.
+# No token: the package is bound to this repository through npm trusted
+# publishing, so npm exchanges a GitHub OIDC identity for a short-lived publish
+# credential. Provenance is signed from the same identity. The publish step runs
+# through `npx npm@12` because trusted publishing needs npm >= 11.5.
 name: publish
 
 on:
@@ -51,17 +51,13 @@ jobs:
       # prepublishOnly during npm publish.
       - run: node tools/cli.mjs list
 
-      - name: The token must authenticate
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm whoami
+      - name: npm client that speaks trusted publishing
+        run: npx -y npm@12 --version
 
       - name: Publish
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.dry_run }}" = "true" ]; then
-            npm publish --provenance --access public --dry-run
+            npx -y npm@12 publish --provenance --access public --dry-run
           else
-            npm publish --provenance --access public
+            npx -y npm@12 publish --provenance --access public
           fi

@@ -7,6 +7,10 @@
 
 ### CI
 
+- 发布不再依赖长期 token：包已通过 npm **trusted publishing** 绑定到本仓库，`publish.yml` 用 GitHub OIDC 换取短期凭据（`npx npm@12 publish --provenance`）。`NPM_TOKEN` secret 可以删除。
+
+### CI
+
 - `scripts/check-bundle.mjs`：把 `npm pack` 的产物装进临时 prefix 再验一遍（文件清单、`dsh.client` 三个字段、patch 行、host 导出、CLI 与 4 个包）。CI 与 `prepublishOnly` 都跑。这一层专门防「源码树里有、发布产物里没有」的清单错误。
 
 ### Changed（0.3.4）
