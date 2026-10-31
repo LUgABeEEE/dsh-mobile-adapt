@@ -5,6 +5,12 @@
 
 ## [Unreleased]
 
+### Fixed（设置页 UI，0.3.1）
+
+- 「安装」主按钮在深色主题下不可见：原先用 `--dsw-alias-label-primary` 当底色、`--dsw-alias-bg-base` 当字色，两个 token 在深色主题下可能同时接近白色；改成中性半透明底 + `currentColor` 描边 + 加粗，两种主题都可见。
+- 兼容清单的结论徽章换行成「有适 / 配包」：加 `white-space: nowrap`。
+- 包名与 id 相同时卡片标题重复（`core-panel core-panel`）：名字等于 id 时只显示一次。
+
 ### 收口 dsh-mobile 0.8.0 实测（2026-10-31）
 
 依据：`实测-0.8.0-20261031.md`（真实网关 `https://192.168.1.11:3443`，390×844 粗指针，
