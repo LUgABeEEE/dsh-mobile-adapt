@@ -1666,7 +1666,7 @@ function writeHuman(report) {
       ['图标按钮宽度', measurements.mobile.baseline.iconButton?.width, measurements.mobile.pack.iconButton?.width, `≥ ${HIT_TARGET}px`],
       ['输入高度', measurements.mobile.baseline.input?.height, measurements.mobile.pack.input?.height, `≥ ${HIT_TARGET}px`],
       ['下拉高度', measurements.mobile.baseline.select?.height, measurements.mobile.pack.select?.height, `≥ ${HIT_TARGET}px`],
-      ['面板左缘', measurements.mobile.baseline.panel?.left, measurements.mobile.pack.panel?.left, `≥ ${RAIL_WIDTH}px`],
+      ['面板左缘', measurements.mobile.baseline.panel?.left, measurements.mobile.pack.panel?.left, '= 基线'],
       ['面板右缘', measurements.mobile.baseline.panel?.right, measurements.mobile.pack.panel?.right, `≤ 390px`],
     ]))
 

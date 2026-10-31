@@ -1,10 +1,12 @@
 # core-panel · 第三方插件面板的手机下限
 
-> 把 `移动适配-dsh-mobile补丁/` 里的「通用三件」从**改宿主**迁成一张独立扩展包：触控命中下限、窄屏宽度回收、56px 折叠轨道让位。不点名任何插件，不改 dsh-mobile 的 `lib/`。
+> 把 `移动适配-dsh-mobile补丁/` 里的通用层从**改宿主**迁成一张独立扩展包：触控命中高度下限、图标按钮宽度下限、窄屏宽度回收。不点名任何插件，不改 dsh-mobile 的 `lib/`。
+>
+> **2026-10-31 收口**：dsh-mobile 的 #319 已合入 main（尚未发布），宿主自己给插件面板 44px 高度地板与面板根宽度收口。本包因此按 **release / main 两条线**改写规则：0.8.x 上仍是唯一来源，宿主接管后对应规则自动退让（见 §2）。
 
 - **目标插件**：无（`target: null` 的通配下限）。这是收录表里唯一被允许的通配例外，因此 `catalog.json` 里 `default: "off"`，由用户点名开启。
-- **宿主**：dsh-mobile 0.8.0（DSH 0.2.1-rc.2）。`0.7.1` 的 `.dshm-*` 结构与之文本一致，但本包只在 0.8.0 上作为基线登记（`verifiedWith`）。
-- **风险 / 状态**：`safe` / `experimental`。全是 CSS 下限 + 一个只写属性的 shim，不动插件 DOM 结构、不注入任何脚本到插件上下文。
+- **宿主**：dsh-mobile **0.8.0**（DSH 0.2.1-rc.2）——真实运行时实测（390×844 粗指针，见 `实测-0.8.0-20261031.md`）；`main`（含 #319）只有源码/merge diff 依据，**本机没有含 #319 的构建**，运行时未量。
+- **风险 / 状态**：`safe` / `experimental`。全是 CSS 下限 + 一个只写自己属性的 shim，不动插件 DOM 结构、不注入任何脚本到插件上下文。
 - **回滚**：删掉 `$DSH_HOME/mobile-access/extensions/core-panel/` 即可（2s 内卸载）；本包不改任何已安装的 DSH 产物。
 
 ---
@@ -13,65 +15,92 @@
 
 | # | 规则 | 生效条件 |
 |---|---|---|
-| 1 | 插件面板内 `button` / `[role="button"]` / `select` 高度 ≥ 44px；`button` / `[role="button"]` 宽度 ≥ 44px（svg-only 图标按钮）；`input`（非 checkbox/radio）/ `textarea` 高度 ≥ 44px | 粗指针 + 面板打开 |
-| 1b | `[role="switch"]` / `[role="checkbox"]` 是显式例外：只撤掉 44px 下限、保持插件自己的视觉尺寸（命中区交给控件自己的 label），见 §5 | 粗指针 + 面板打开 |
-| 2 | ≤720px 上面板让开折叠的 56px 图标轨道：让位加在 `.dshm-mainContent` 的 `padding-left` 上（实测轨道宽，写进 `--dshm-rail`，0–64px） | ≤720px + 面板打开 |
-| 2b | 让位后插件根不超出剩余宽度：主槽根节点 `max-width:100%` + `box-sizing:border-box` | ≤720px + 面板打开 |
-| 3 | 面板页底部让出 `env(safe-area-inset-bottom)` | ≤720px + 面板打开 |
+| 1 | 插件面板内 `button` / `[role="button"]` / `select` / `input`（非 checkbox/radio）/ `textarea` 高度 ≥ 44px | 粗指针 + 面板打开 + **宿主没有 `data-dsh-panel`**（0.8.x 发布线） |
+| 1b | `[role="switch"]` / `[role="checkbox"]` 是显式例外：只撤掉 44px 下限、保持插件自己的视觉尺寸（命中区交给控件自己的 label），见 §6 | 同 #1 |
+| 2 | `button` / `[role="button"]` 宽度 ≥ 44px（svg-only 图标按钮） | 粗指针 + 面板打开，**两条发布线都生效**（宿主不提供 min-width） |
+| 3 | ≤720px 上插件根不超出剩余宽度：主槽根节点 `max-width:100%` + `box-sizing:border-box` | ≤720px + 面板打开 + 宿主没有 `data-dsh-panel`（#319 起宿主已写等价规则） |
+| 4 | 面板页底部让出 `env(safe-area-inset-bottom)` | ≤720px + 面板打开（宿主不提供；headless 里为 0，真机未验证） |
 
-**面板状态不用 `:has()`。** `mobile.js` 用 `MutationObserver` + `requestAnimationFrame` 节流，在外壳 `.dshm-main` 上写 `data-dsh-panel="1|0"`；CSS 只认这个属性。部分 WebView 没有 `:has()`，第一版补丁在真机上因此整体失效过。
+**版本门阀**：`data-dsh-panel` 是 dsh-mobile #319（main `6c50b13`）起宿主自己写在 `.dshm-main` 上的面板状态属性。本包用 `.dshm-main:not([data-dsh-panel])` 作门阀：
 
-**为什么让位加在 `.dshm-mainContent` 的 padding 上，而不是插件根的 margin**：插件根常是 `width:100%`，给它加 margin 会变成 100%+56，右边被宿主的 `overflow:hidden` 裁掉。padding 缩小的是内容盒，子节点按剩余宽度布局——本包同时用 `max-width:100%` + `border-box` 兜住 `100vw` / 固定像素宽的面板根。
+| 宿主 | 高度地板（#1） | 宽度下限（#2） | 宽度回收（#3） | 数据来源 |
+|---|---|---|---|---|
+| 0.8.0（发布线，**不在**包里） | **本包提供**（唯一来源） | 本包提供 | 本包提供（无触发场景） | 真实运行时实测 |
+| main #319（未发布） | 宿主提供 → 本包退让 | 本包提供（宿主没有） | 宿主提供 → 本包退让 | #319 merge diff【推断】 |
 
-**为什么不注入 `<style>`**：扩展运行时会把 `mobile.css` 自动注入成 `<style data-dsh-mobile-extension-style="core-panel">`（dsh-mobile `src/client.ts`）。`mobile.js` 只写属性和 CSS 变量，所以重复 `activate` 不会产生第二个 `<style data-plugin="core-panel">`——本包根本不创建 style 节点。重复激活会先执行上一代的 cleanup，observer / rAF / resize 监听不会叠加。
+**面板状态不用 `:has()`，也不用宿主的属性。** `mobile.js` 用 `MutationObserver` + `requestAnimationFrame` 节流，在外壳 `.dshm-main` 上写 **本包自有** 的 `data-dshm-adapt-panel="1|0"`；CSS 只认这个属性。部分 WebView 没有 `:has()`，第一版补丁在真机上因此整体失效过。之所以不写 `data-dsh-panel`：那是宿主 #319 起自己维护的状态，两个写入方会互相覆盖（见 §5）。
+
+**为什么不注入 `<style>`**：扩展运行时会把 `mobile.css` 自动注入成 `<style data-dsh-mobile-extension-style="core-panel">`（dsh-mobile `src/client.ts`）。`mobile.js` 只写属性和 CSS 变量，所以重复 `activate` 不会产生第二个 `<style>` 节点。重复激活会先执行上一代的 cleanup，observer / rAF / resize 监听不会叠加。
 
 ## 2. opt-out 的语义
 
-opt-out 是**面板级**开关：只要主槽 `[data-slot="main"]` 的**子树**里出现 `data-dsh-adapt="off"`，或者主槽 / 外壳祖先（`.dshm-mainContent`、`.dshm-main`、`body` …）带这个属性，shim 就把整个面板状态写成 `data-dsh-panel="0"`。CSS 的三条规则都只在 `"1"` 下命中，所以 opt-out 是「关掉面板状态」而不是「再用一套规则覆盖回去」：
+opt-out 是**面板级**开关：只要主槽 `[data-slot="main"]` 的**子树**里出现 `data-dsh-adapt="off"`，或者主槽 / 外壳祖先（`.dshm-mainContent`、`.dshm-main`、`body` …）带这个属性，shim 就把整个面板状态写成 `data-dshm-adapt-panel="0"`。CSS 的所有规则都只在 `"1"` 下命中，所以 opt-out 是「关掉面板状态」而不是「再用一套规则覆盖回去」：
 
 - 按钮/输入回到插件自己的 28/32px；
-- 面板左缘回到 0，不再让位；
+- 图标按钮宽度回到 28px；
 - 底部安全区也不再追加。
 
-为什么对整棵子树求值：插件经常在 `[data-slot="main"]` 与真正的面板之间再包一层，也可能一次渲染多个根；只认「第一个直接子元素」会让 `off` 静默失效（评审 F3）。代价是：任意后代自己写的 `off` 也会关掉整张面板——这是刻意的面板级语义，不给单个控件开小灶；要细粒度只关一个控件，应由插件自己控制样式，而不是用这个属性。
+为什么对整棵子树求值：插件经常在 `[data-slot="main"]` 与真正的面板之间再包一层，也可能一次渲染多个根；只认「第一个直接子元素」会让 `off` 静默失效（评审 F3）。代价是：任意后代自己写的 `off` 也会关掉整张面板——这是刻意的面板级语义，不给单个控件开小灶。
 
 opt-out 可以在页面生命周期里切换，`data-dsh-adapt` 的属性变化也在 observer 范围内。
 
-**注意**：本包的 CSS 与 shim 是同一个状态开关。只加载 `mobile.css` 而没有 `mobile.js` 时，`data-dsh-panel` 永远不会被写上，规则整体不生效（这是刻意的：没有状态就没有适配）。
+**注意**：本包的 CSS 与 shim 是同一个状态开关。只加载 `mobile.css` 而没有 `mobile.js` 时，`data-dshm-adapt-panel` 永远不会被写上，规则整体不生效（这是刻意的：没有状态就没有适配）。宿主自己写 `data-dsh-panel` 时，本包的高度地板/宽度回收本来就会退让。
 
 ## 3. 用到的宿主标记（债务登记）
 
 | 标记 | 用途 | 登记位置 |
 |---|---|---|
-| `.dshm-main` | 写 `data-dsh-panel`、挂 `--dshm-rail` | `catalog.json` → `usesHostMarkers` |
-| `.dshm-mainContent` | 让位 padding-left / 底部安全区 | 同上 |
-| `.dshm-panelNav` / `.dshm-panelBack` | 判断「面板打开」 | 同上（两个都已登记；`panelBack` 是同义的备用判据，不是主依赖） |
-| `.dshm-drawer` | 实测折叠轨道宽度（`data-open` / 显隐 / 宽度） | 同上 |
+| `.dshm-main` | 写 `data-dshm-adapt-panel`、读宿主的 `data-dsh-panel`（门阀） | `catalog.json` → `usesHostMarkers` |
+| `.dshm-mainContent` | 底部安全区 | 同上 |
+| `[data-slot="main"]` | 面板内控件 / 面板根的作用域 | 同上 |
+| `.dshm-panelNav` / `.dshm-panelBack` | 判断「面板打开」 | 同上（`panelBack` 是同义的备用判据） |
 
 `.dshm-*` 是 dsh-mobile 的内部类名，没有公开契约。任一标记消失，这张包就会失效，CI（`tools/check-pack.mjs`）对 DOM 快照做存在性断言时会红到具体标记，不是静默失效。
 
-## 4. 与上游意图的显式偏离
+## 4. 与上游意图的显式偏离（rail-clearance 已退役）
 
-dsh-mobile 0.8.0 在手机上**刻意**让抽屉以 56px 覆盖层压在内容上、不让位（#306 只给 721–899px 补了 56px margin）。本包在 ≤720px 推出 56px 是**与外壳意图不同的一次显式偏离**，理由：折叠轨道是 `position:fixed` 覆盖层，插件面板没有外壳 header 的 `padding-left:52px`，左边 56px 会被轨道压住（补丁 §1 的真机证据）。
+旧版本在 ≤720px 推 56px 让开折叠轨道（与外壳「保持覆盖」的意图不同）。**2026-10-31 实测后删除**：
 
-因此：
+- 390×844 面板态下，抽屉是 `data-right-modal` → `display:none`（实测抽屉宽 0），`--dshm-rail` = 0px，让位量乘 0；
+- 768×1024 下宿主已经 `margin-left:56px` 让位（`lib/mobile-layout.js:437`，721–899 段），本包的 `@media (max-width:720px)` 根本不命中；
+- 两种尺寸下面板左右缘完全一致（0…390 / 56…768），**没有可测量的让位场景**。
 
-- 收录表里 `default: "off"`，不默认改变任何人的页面；
-- 只在 `mobile-dedicated` 面生效（stock DSH web 面没有 `.dshm-*`，不在本包范围）；
-- 不满意可以用 `data-dsh-adapt="off"` 或直接不安装。
+因此 `rail-clearance` 能力、`--dshm-rail` 变量与 `measureRail()` 一起移除，`catalog.json` 不再声明该能力。若将来某个宿主在手机上真的露出 56px 轨道且不让位，应当作为新证据重新提案，而不是复活一条没人测到的规则。
 
-## 5. 代价与边界
+## 5. 与宿主 #319 的关系（撞名与退让）
 
-- **`!important` 会压过插件自己的紧凑设计**。插件若坚持 28px 行，只能在面板根再用 `!important` 反覆盖，或整体 `data-dsh-adapt="off"`。这是「通配下限」的代价，也是它默认关的原因。
-- **开关/勾选不放大视觉**：`[role="switch"]` / `[role="checkbox"]` 只撤掉 44px 下限（`min-height/min-width: 0 !important`），保持插件自己的 24/20px 视觉；命中区交给控件自己的 label / 外层可点区域。这个取舍的理由：用伪元素硬扩命中区会覆盖开关自己的 `::before/::after`（轨道/旋钮），所以本包不这么做。若某个插件没有 label，需要它自己补 44px 命中层。
-- **56px 让位对「贴边全幅」插件（画布、看图）不一定合适**：面板左缘会被推 56px。画布类插件应 opt-out，或在面板根再用 `!important` 抵消。
+#319（merge `6c50b13`，2026-10-31T08:46Z 合入 main；v0.8.0 发布于 10-30T03:14Z，包里没有）做的是：
+
+- `.dshm-main` 上写 `data-dsh-panel="1|0"`（`activePanelId` 是否为空）；
+- 面板内 `button` / `[role="button"]` / `select` / 单行 `input` / `textarea` 在粗指针下 `min-height:44px`；
+- 面板根 `max-width:100%;box-sizing:border-box`；面板态 `.dshm-main` / `.dshm-mainContent` `overflow-y:auto`；
+- 面板根 `data-dsh-adapt="off"` 是宿主的 opt-out。
+
+本包的处置：
+
+| #319 的东西 | 本包 |
+|---|---|
+| 写 `data-dsh-panel` | **不写**，改用自有 `data-dshm-adapt-panel`；宿主的属性只读（CSS 门阀 + shim 不碰） |
+| 44px 高度地板 | 只在 `:not([data-dsh-panel])` 分支保留（0.8.x 兜底）；宿主接管后不叠加 |
+| 面板根宽度收口 | 同上，只作 0.8.x 兜底 |
+| 面板态滚动 | 本包不做（`floaters` 因自身需要而做，见那张包的说明） |
+| `min-width:44`（图标按钮） | **保留在两条线上**：宿主不提供 |
+| 底部安全区 | **保留**：宿主不提供 |
+
+`check-pack` 对声明了门阀的包额外跑一遍 **host-probe**：伪造宿主已写 `data-dsh-panel`，断言（a）shim 不改写它、（b）高度地板退让回基线、（c）`min-width` 仍生效。这只是合成夹具，不能替代含 #319 的真实运行时。
+
+## 6. 代价与边界
+
+- **`!important` 会压过插件自己的紧凑设计**（只在 0.8.x 分支里）。插件若坚持 28px 行，只能在面板根再用 `!important` 反覆盖，或整体 `data-dsh-adapt="off"`。这是「通配下限」的代价，也是它默认关的原因。
+- **开关/勾选不放大视觉**：`[role="switch"]` / `[role="checkbox"]` 只撤掉 44px 下限（`min-height/min-width: 0 !important`），保持插件自己的 24/20px 视觉；命中区交给控件自己的 label / 外层可点区域。理由：用伪元素硬扩命中区会覆盖开关自己的 `::before/::after`（轨道/旋钮）。
+- **两个写入方已分开**：旧版 shim 写 `data-dsh-panel`，在含 #319 的宿主上会与宿主抢写；现在本包只写自有属性，宿主的状态归宿主（host-probe 断言会守住这一点）。
 - **只覆盖粗指针 + 面板打开**：桌面/鼠标不变；没有 `.dshm-panelNav` 的会话页不变。
 - **不碰弹层**：portal 到 `<body>` 的 `[role="dialog"]` 不在范围内；DSH 自己的设置页也是 `role="dialog"`，上一版补丁在这里把开关撑成大方块后已撤销。
 - **不改排版/字号**：dsh-mobile 自己已对输入框字号用 `font-size: max(16px, …) !important`，本包不重复设置，避免和插件排版打架。
-- **轨道宽度是实测值**：抽屉动画中间值不会被当成让位量（展开时记 0）；若宿主换掉 56px 轨道，本包不需要改。
-- 真机仍待验证：拇指准确度、真实 `env(safe-area-inset-*)`、软键盘后的可视区、惯性滚动。当前验证是 Playwright fixture（390×844 粗指针 / 1280×800 精指针），`catalog.json` 的 `verifiedWith` 记录的是目标基线 0.8.0，不代表真机已验收。
+- **宽度回收与安全区在 0.8.0 上是「规则在、场景没有」**：面板态 390/390、768/768 无溢出；`env(safe-area-inset-bottom)` 在 headless 里是 0。两者都算未验证收益，不是已量到的修复。
+- 真机仍待验证：拇指准确度、真实 `env(safe-area-inset-*)`、软键盘后的可视区、惯性滚动。`catalog.json` 的 `verifiedWith` 记录的是目标基线 0.8.0，不代表真机已验收。
 
-## 6. 验证
+## 7. 验证
 
 ```bash
 node tools/check-pack.mjs packs/core-panel --desktop
@@ -85,18 +114,26 @@ node tools/check-pack.mjs packs/core-panel --desktop
 | 图标按钮 | 28×28 | **44×44** | 28×28 |
 | 输入高度 | 32px | **44px** | 32px |
 | 下拉高度 | 32px | **44px** | 32px |
-| 面板左缘 | 0px | **56px** | 0px |
+| 面板左缘 | 0px | 0px（rail 已退役） | 0px |
 | 面板右缘 | 390px | **390px** | 390px |
 | 1280×800 桌面 | — | 逐项等于基线（`--desktop` 严格零回归） | — |
+| 宿主自管状态（host-probe） | — | 按钮/输入回 28/32、图标按钮仍 44、宿主属性未被改写 | — |
 
-静态层同时断言：`extension.json` 恰好 5 字段、`id === core-panel`、全部 7 条选择器落在 `[data-dsh-panel="1"]` 作用域、无第三方类名、无 `:has()`、无 `@import`。
+静态层同时断言：`extension.json` 恰好 5 字段、`id === core-panel`、全部 7 条选择器落在 `[data-dsh-panel]` / `[data-dshm-adapt-panel="1"]` / `(pointer: coarse)` / `[data-dsh-adapt="off"]` 作用域、无第三方类名、无 `:has()`、无 `@import`。
 
-独立 Playwright 探针补测 check-pack fixture 未覆盖的两类（脚本在 `/tmp`，不随仓库发布）：
+## 8. 真实运行时（dsh-mobile 0.8.0，2026-10-31）
 
-- **F2**：`button[role="switch"]` 24×24、`div[role="checkbox"]` 20×20 装包后视觉尺寸不变（开关自己的 `::after` 旋钮也未被覆盖）；同页普通按钮仍 44、输入仍 44。
-- **F3**：面板被 wrapper 包一层、主槽多根、以及 `.dshm-mainContent` / `.dshm-main` 祖先带 `off` 时，`data-dsh-panel` 均为 0，按钮/输入/面板左缘全部回落到基线。
+| 观察项 | 纯宿主 | 只开 core-panel |
+|---|---|---|
+| 主槽控件 / <44px | 94 / **94**（最小 20px） | 94 / **41**（抬起 53 个；最小命中仍是 20px，未达标的控件类型 t1 未定性） |
+| 图标按钮（fixture 口径） | 28×28 | **44×44** |
+| 面板根 | 0…390 | 0…390（不变） |
+| `--dshm-rail` | 无 | 0px（rail 已删除，历史值） |
+| 横向溢出 | 无 390/390 | 无 390/390 |
 
-## 7. 与补丁的关系
+测量口径：真实网关 `https://192.168.1.11:3443`，`--open Plugins`，settle 2500ms；纯宿主用请求拦截扩展资源得到（副作用是宿主弹出 “Mobile customization could not be loaded” 提示条）。完整原始数值与命令见工作区 `实测-0.8.0-20261031.md`。
+
+## 9. 与补丁的关系
 
 本包是 `移动适配-dsh-mobile补丁/` 通用层的迁移目标，但**不是逐行复制**：
 
@@ -104,8 +141,8 @@ node tools/check-pack.mjs packs/core-panel --desktop
 |---|---|
 | 改 `lib/mobile-layout.js`（安装即改产物） | 扩展目录，删目录即回滚 |
 | 一个 IIFE 往 `<head>` 注入 `<style>` | CSS 由扩展运行时注入，`mobile.js` 不创建 style |
-| 让位用 `margin-left`（CSS 注释解释 scrollLeft） | 按收录口径改用 `.dshm-mainContent` 的 `padding-left`，并用 `max-width/border-box` 防溢出 |
-| 返回栏按钮、抽屉侧栏、reduced-motion | 未收录：返回栏/抽屉是宿主 UI，不属「插件面板」；reduced-motion 归宿主 |
+| 让位用 `margin-left`（推 56px 轨道） | 已退役：0.8.0/768 上都没有可测场景（§4） |
+| 返回栏按钮、抽屉侧栏、reduced-motion | 未收录：返回栏/抽屉是宿主 UI（`shell-chrome` 单独管）；reduced-motion 归宿主 |
 | 开关/勾选的视觉复位 | 已迁移：`[role="switch"]` / `[role="checkbox"]` 撤掉 44px 下限，保持原视觉；命中区交给控件自己的 label |
 | 通配且默认生效 | 通配但 `default: "off"`、可逐页 opt-out |
 

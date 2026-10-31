@@ -3,5 +3,5 @@
   "id": "core-panel",
   "name": "Core Panel",
   "version": "0.1.0",
-  "description": "第三方插件面板的手机下限：粗指针 44px 命中区、≤720px 宽度回收与 56px 折叠轨道让位，可 opt-out。"
+  "description": "第三方插件面板的手机下限：宿主无 44px 地板时（0.8.x 发布线）粗指针下给命中区兜底，宿主自带地板（#319 起的 main）时只补图标按钮宽度；≤720px 收回 100vw 插件根，可 opt-out。"
 }
