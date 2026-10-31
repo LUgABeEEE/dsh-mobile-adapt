@@ -25,7 +25,9 @@
     width: 28px; height: 28px; padding: 0; border: 0; border-radius: 6px;
     background: transparent; color: #9aa0ab; }
   .demo-input, .demo-select { min-height: 32px; width: 100%; padding: 4px 8px;
-    border: 1px solid #3a3d45; border-radius: 8px; background: #16171b; color: inherit; font: inherit; }
+    border: 1px solid #3a3d45; border-radius: 8px; background: #16171b; color: inherit; font: inherit;
+    /* dsh-mobile gives text fields 16px; fixtures model the host. */
+    font-size: 16px; line-height: 1.25; }
 
   .dshm-drawer { position: fixed; inset: 0 auto 0 0; width: 56px; background: #1a1c22;
     padding-top: env(safe-area-inset-top); overflow: hidden; }
