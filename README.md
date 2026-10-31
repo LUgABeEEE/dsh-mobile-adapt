@@ -58,6 +58,16 @@ $env:DSH_HOME = 'C:\Users\you\.dsh'   # default when unset: %USERPROFILE%\.dsh
 
 One path is not exercised by a normal install: the EXDEV fallback in `install.mjs` (copy + delete instead of `rename`). Install source and target both live under the same `$DSH_HOME`, so a plain rename is what actually runs; the fallback stays for unusually mounted homes and is documented rather than claimed as tested.
 
+## Targeted fixtures
+
+The built-in fixture measures a generic, deliberately desktop-first plugin panel. A pack aimed at one specific plugin can ship `packs/<id>/fixture.html` with that plugin's own DOM; `check-pack` then runs every round (baseline, pack, opt-out, desktop zero-regression) against it instead. Without the file the built-in fixture is used and the report says which one ran — human output prints `fixture：内置（回退内置 fixture）` and `--json` carries `fixture.kind`.
+
+```bash
+node tools/check-pack.mjs docs/examples/fixture-pack --desktop   # runnable example
+```
+
+The contract — allowed markup (DOM + inline styles only, no scripts/event handlers/external or `data:` references, ≤ 256 KB), the required shell/panel hooks, how `target` / `usesHostMarkers` / `evidence` must describe the fixture — is in [`docs/定向-fixture.md`](docs/定向-fixture.md). `docs/examples/fixture-pack/` is a runnable example, not a real pack: it lives outside `packs/`, is not in `catalog.json`, and therefore reports one harmless catalog warning.
+
 ## Opt out
 
 ```html

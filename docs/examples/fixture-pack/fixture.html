@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>fixture-pack · 定向 fixture</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #17181c; color: #e6e6e6;
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  .dshm-shell { display: grid; grid-template-columns: minmax(0, 1fr); height: 100vh; }
+  .dshm-main { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
+  .dshm-panelNav { display: flex; align-items: center; gap: 8px; min-height: 56px;
+    padding: max(4px, env(safe-area-inset-top)) 12px 4px 68px; border-bottom: .5px solid #333; }
+  .dshm-mainContent { position: relative; flex: 1; min-width: 0; min-height: 0; overflow: hidden; }
+  [data-slot="main"] { display: contents; }
+
+  /* Deliberately desktop-first: the pack under test has to move these values. */
+  .demo-panel { display: flex; flex-direction: column; gap: 12px; padding: 16px; width: 100%; }
+  .demo-panel h2 { margin: 0; font-size: 16px; }
+  .demo-row { display: flex; align-items: center; gap: 8px; }
+  .demo-btn { min-height: 28px; padding: 0 10px; border: 0; border-radius: 8px;
+    background: #262933; color: inherit; font: inherit; }
+  .demo-iconbtn { display: inline-flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px; padding: 0; border: 0; border-radius: 6px;
+    background: transparent; color: #9aa0ab; }
+  .demo-input, .demo-select { min-height: 32px; width: 100%; padding: 4px 8px;
+    border: 1px solid #3a3d45; border-radius: 8px; background: #16171b; color: inherit; font: inherit; }
+
+  .dshm-drawer { position: fixed; inset: 0 auto 0 0; width: 56px; background: #1a1c22;
+    padding-top: env(safe-area-inset-top); overflow: hidden; }
+  .dshm-drawer .rail { width: 56px; height: 100%; display: grid; place-items: start center; padding-top: 12px; }
+  .dshm-drawer[data-open="true"] { width: 280px; }
+  .dshm-drawer[data-open="true"] .rail { display: none; }
+  .dshm-drawer [data-slot="sidebar"] { display: flex; flex-direction: column; gap: 4px; padding: 12px 8px; }
+  .rail-btn { min-height: 28px; padding: 0 10px; border: 0; border-radius: 8px;
+    background: transparent; color: inherit; font: inherit; text-align: left; }
+
+  /* The fixture-only hook for a bottom-right floating widget. */
+  .demo-floater { position: fixed; right: 8px; bottom: 0; width: 112px; height: 118px;
+    z-index: 9999; border-radius: 12px 12px 0 0; background: #2b3350; color: #cfd8ff;
+    font-size: 11px; text-align: center; padding-top: 8px; }
+</style>
+</head>
+<body>
+  <div class="dshm-shell">
+    <main class="dshm-main" data-pane="conversation">
+      <div class="dshm-panelNav"><button type="button" aria-label="返回会话">‹ 返回会话</button></div>
+      <div class="dshm-mainContent">
+        <div data-slot="main">
+          <div class="demo-panel">
+            <h2>示例插件面板（定向 fixture）</h2>
+            <div class="demo-row">
+              <button type="button" class="demo-btn">新建</button>
+              <button type="button" class="demo-iconbtn" aria-label="更多">···</button>
+            </div>
+            <input class="demo-input" placeholder="搜索">
+            <select class="demo-select"><option>全部</option></select>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+  <aside class="dshm-drawer" data-open="false"><div class="rail">≡</div><div data-slot="sidebar">
+    <button type="button" class="rail-btn">会话</button>
+    <button type="button" class="rail-btn">文件</button>
+    <button type="button" class="rail-btn">设置</button>
+  </div></aside>
+  <div data-fixture="floater" class="demo-floater">悬浮件</div>
+</body>
+</html>

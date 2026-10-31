@@ -1,0 +1,50 @@
+/* fixture-pack · 示例包的 mobile.css
+ *
+ * 只做示例所需的最小适配，全部选择器都落在 check-pack 允许的作用域里：
+ * - `@media (pointer: coarse)` 内的规则；
+ * - 含 `[data-dsh-panel="1"]` 的规则；
+ * - 含 `[data-dsh-adapt="off"]` 的 opt-out 规则。
+ * 不允许 `:has()`、第三方类名、@import/url()。
+ */
+
+@media (pointer: coarse) {
+  /* 面板内触控地板（示例只做高度 + 按钮宽度）。 */
+  .dshm-main[data-dsh-panel="1"] [data-slot="main"] :where(button, [role="button"], select) {
+    min-height: 44px !important;
+  }
+  .dshm-main[data-dsh-panel="1"] [data-slot="main"] :where(button, [role="button"]):not([role="switch"]):not([role="checkbox"]) {
+    min-width: 44px !important;
+  }
+  .dshm-main[data-dsh-panel="1"] [data-slot="main"] :where(input:not([type="checkbox"]):not([type="radio"]), textarea) {
+    min-height: 44px !important;
+  }
+
+  /* 外壳：返回栏与展开抽屉的行。 */
+  :root:not([data-dsh-adapt="off"]) .dshm-panelNav :where(button, [role="button"]) {
+    min-height: 44px !important;
+    min-width: 44px !important;
+  }
+  :root:not([data-dsh-adapt="off"]) .dshm-drawer[data-open="true"] [data-slot="sidebar"] :where(button, [role="button"]) {
+    min-height: 44px !important;
+  }
+
+  /* 浮动控件让位：JS 量出高度写入 --dshm-floaters。 */
+  :root:not([data-dsh-adapt="off"])[data-dsh-floaters="1"] .dshm-mainContent {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  :root:not([data-dsh-adapt="off"])[data-dsh-floaters="1"] [data-slot="main"] > * {
+    margin-bottom: var(--dshm-floaters, 0px);
+  }
+}
+
+/* 窄屏让开 56px 折叠轨道。 */
+@media (max-width: 720px) {
+  .dshm-main[data-dsh-panel="1"] .dshm-mainContent {
+    padding-left: var(--dshm-rail, 56px);
+  }
+  .dshm-main[data-dsh-panel="1"] [data-slot="main"] > * {
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+}
