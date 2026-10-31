@@ -12,6 +12,24 @@
 - **回滚**：删掉 `$DSH_HOME/mobile-access/extensions/dshmarket-mobile/` 即回滚（2s 内卸载）；
   本包不改任何已安装的 DSH 产物。opt-out 也可用：面板根/文档根带 `data-dsh-adapt="off"`。
 
+## 0. 证据分级：凭什么说这是「真缺口」
+
+作者 review 时最可能问的是这一点，所以先给四级证据。**只有第一级是通用 fixture，本包没有用它跑结论**：
+
+| 证据层 | 状态 | 数字 |
+|---|---|---|
+| 通用 fixture（`check-pack` 内置） | **未使用/不适用** —— 本包存在 `packs/dshmarket-mobile/fixture.html`，`check-pack` 全轮次都用定向 fixture，不回退内置；内置 fixture 里也没有 `[data-dsh-market-root]`，用它对 dshmarket 断言等于空转 | — |
+| **定向 fixture**（`check-pack`，390×844 粗指针） | **通过** | 137 个按钮最小边 **28→44px**、图标按钮宽 **28→44px**、输入框高 **22→44px**；opt-out 全部回落到基线；1280×800 精指针 + `--desktop` 严格零回归。合计 **RESULT PASS（30 passed · 0 failed · 4 skipped）** |
+| **真实面板 / stock DSH web**（隔离实例捕获 + `dsh-ui-lab` 390×844 注入对照） | **通过（stock web 口径）** | 捕获口径：173 个可交互元素中 **172 个 <44px**（98.3%，最小 12.1px）；搜索输入 **154×24px、font-size 14px**。lab 口径：可测控件 138，最小边 **12.1→44px**，<44px 计数 **138→0**，面板盒 334×844 未变、无横向溢出 |
+| dsh-mobile 专用移动页 / 真机 | **未验证** —— 本机没有可用的专用移动页运行时，也没有真机 | 见 §6 |
+
+两个数字（172/173 与 138/138）不是矛盾，是**口径不同**：
+
+- **173** = 真实面板里全部可交互元素（含 34 个卡片 `<a>` 链接）；
+- **138** = `check-pack` 的计量口径（`button` / `[role="button"]` / `select` / `input` / `textarea`，链接不计入），
+  即 137 个 button + 1 个 input；两组数字都说明「插件自己的面板在手机上几乎没有可点中 44px 的目标」。
+- fixture 里输入框高 22px、真实页面 24px：合成外壳与真实布局的 2px 上下文差异，二者都远低于 44px。
+
 ## 1. 它做什么
 
 | # | 规则 | 生效条件 |
@@ -47,7 +65,10 @@ pack 不引用）。
 `fixture.html`（142,712 B，< 256 KB）是 **dshmarket 1.73.3 真实主面板**在 390×844 下的 DOM 快照，
 用于让 `check-pack` 在「这个插件自己的面板」上做真实盒模型断言，而不是在通用 fixture 上空转：
 
-- 来源：隔离 DSH web 实例打开「插件市场」后抓取；捕获时 173 个可交互元素、172 个 <44px；
+- 来源：隔离 DSH web 实例（本机 DSH 0.2.1-rc.3 + dshmarket 1.73.3）在 **390×844 @3×** 下打开
+  侧栏「插件市场」入口、收起抽屉（stock web 挤压视口下抽屉是挤压式，不收只剩 110px）后捕获；
+  入口默认关闭，用 dshmarket 自己的 `POST /dsh-market/sidebar-entry` 在隔离环境开启，
+  **没有改真实 `.dsh`**。捕获时 173 个可交互元素、172 个 <44px，搜索输入 154×24 / 14px 字号；
 - 处理：只留面板子树；去掉 `href`/`src`/xmlns/外链/`@import`/`url()`；套上 check-pack 要求的
   最小外壳骨架（`.dshm-shell` / `.dshm-main` / `.dshm-mainContent` / `[data-slot="main"]`）；
 - 脱敏：不含会话内容、账号、凭据、token、真实路径；面板内是公开插件目录数据；
@@ -78,7 +99,7 @@ RESULT PASS（30 passed · 0 failed · 4 skipped）
   适配生效、opt-out 全部回落；
 - 1280×800 精指针 + `--desktop` 严格零回归：mainContent 盒模型与全部控件矩形均未改动。
 
-dsh-ui-lab 对照（**stock DSH web 口语境**，390×844 @3×，隔离实例 + `--inject` 模拟装包）：
+dsh-ui-lab 对照（**stock DSH web 口径**，390×844 @3×，隔离实例 + `--inject` 模拟装包）：
 
 | | 可测控件 | 最小边 | <44px | 面板盒 | 横向溢出 |
 |---|---|---|---|---|---|
@@ -86,9 +107,17 @@ dsh-ui-lab 对照（**stock DSH web 口语境**，390×844 @3×，隔离实例 +
 | after | 138 | **44px** | **0 / 138** | 334×844 @x=56（未变） | 无 |
 
 截图：`shots/before-390x844.png`、`shots/after-390x844.png`（同口径，仅注入 CSS 不同）。
-命令与原始 JSON 见本仓 PR 描述；复跑方式：起隔离实例 → 启用侧栏入口 → `node src/cli.mjs shot
---surface web --profile phone-390x844 --url <token> --open "插件市场" --inject packs/dshmarket-mobile`。
-注意：stock web 挤压视口下抽屉是挤压式而非覆盖式，截图前需收起抽屉，否则面板只剩 110px 宽。
+复跑命令（两个面都不装 dsh-mobile；隔离实例 + 临时 inject helper 收起首启弹窗与抽屉）：
+
+```bash
+# 起隔离 DSH web（独立 DSH_HOME / 端口），启用 dshmarket 侧栏入口后：
+node src/cli.mjs shot --surface web --profile phone-390x844 --url "<token-url>" \
+  --open "插件市场" --inject <before|after> --wait 3000 \
+  --out .shots/lab-dshmarket-<side> --json
+```
+
+注意：stock web 挤压视口下抽屉是挤压式而非覆盖式，截图前需收起抽屉，否则面板只剩 110px 宽；
+helper 只存在于测量脚本里，**不随 pack 发布**。
 
 ## 6. 未验证 / 边界
 
