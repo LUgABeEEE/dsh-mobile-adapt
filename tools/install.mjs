@@ -20,30 +20,24 @@
  * 卷内的 rename，跨卷（EXDEV，Windows 对应 ERROR_NOT_SAME_DEVICE）会自动退化为
  * 复制 + 删除。
  *
+ * 文件操作由 ../lib/store.mjs 实现，与 DSH 设置里的「插件适配」面板共用同一套规则。
+ *
  * 用法：
  *   node tools/install.mjs pack <id> [--dry-run] [--yes]
  *   node tools/install.mjs --uninstall <id> [--dry-run] [--yes]
  */
-import { createHash } from 'node:crypto'
+import { existsSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import {
-  cpSync,
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  readdirSync,
-  renameSync,
-  rmSync,
-  statSync,
-} from 'node:fs'
-import { homedir } from 'node:os'
-import { basename, dirname, join, relative, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+  HOT_RELOAD_NOTE,
+  ID_RE,
+  PackError,
+  installPack,
+  planInstall,
+  resolveDshHome,
+  uninstallPack,
+} from '../lib/store.mjs'
 
-const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-const PACKS_DIR = join(REPO, 'packs')
-const CATALOG_FILE = join(REPO, 'catalog.json')
-const ID_RE = /^[a-z][a-z0-9-]{0,63}$/
-const MAX_RAIL_NOTE = '扩展目录每 2s 轮询一次：复制或移走后无需重启 dsh-mobile。'
 const WINDOWS = process.platform === 'win32'
 
 function usage() {
@@ -64,8 +58,9 @@ function usage() {
   ].join('\n')
 }
 
-function fail(message) {
+function fail(message, hint = '') {
   console.error(`错误：${message}`)
+  if (hint !== '') console.error(hint)
   process.exit(1)
 }
 
@@ -129,153 +124,67 @@ function parseArgs(argv) {
   return options
 }
 
-/** 展开 `~` / `~/…`，让 POSIX 与 Windows 的 DSH_HOME 写法都可用。 */
-function expandHome(value) {
-  const trimmed = String(value).trim()
-  if (trimmed === '~') return homedir()
-  return /^~[\\/]/.test(trimmed) ? join(homedir(), trimmed.slice(2)) : trimmed
-}
-
-function dshHome() {
-  const configured = process.env.DSH_HOME
-  const value = configured !== undefined && configured.trim() !== '' ? expandHome(configured) : join(homedir(), '.dsh')
-  return resolve(value)
-}
-
-function readManifest(packDir) {
-  const manifestFile = join(packDir, 'extension.json')
-  let value
-  try {
-    value = JSON.parse(readFileSync(manifestFile, 'utf8'))
-  } catch (error) {
-    fail(`读不到合法的 ${manifestFile}：${error instanceof Error ? error.message : String(error)}`)
-  }
-  const keys = Object.keys(value).sort().join(',')
-  if (keys !== 'description,id,name,schemaVersion,version') fail(`${manifestFile} 字段集合不是恰好 5 个（实际 ${keys}）`)
-  if (value.schemaVersion !== 1) fail(`${manifestFile} 的 schemaVersion 必须为 1`)
-  if (value.id !== basename(packDir)) fail(`${manifestFile} 的 id（${value.id}）必须等于目录名（${basename(packDir)}）`)
-  return value
-}
-
-function readCatalogEntry(id) {
-  let catalog
-  try {
-    catalog = JSON.parse(readFileSync(CATALOG_FILE, 'utf8'))
-  } catch (error) {
-    fail(`读不到合法的 catalog.json：${error instanceof Error ? error.message : String(error)}`)
-  }
-  const entry = Array.isArray(catalog.packs) ? catalog.packs.find(item => item !== null && item.id === id) : undefined
-  if (entry === undefined) fail(`catalog.json 里没有 ${id} 的条目：未收录的包不能安装（见 docs/收录标准.md）`)
-  return entry
-}
-
-function sha256(file) {
-  return createHash('sha256').update(readFileSync(file)).digest('hex')
-}
-
-/** 递归列出包内文件（相对 POSIX 路径），按路径排序。 */
-function listFiles(root) {
-  const files = []
-  const walk = current => {
-    for (const entry of readdirSync(current, { withFileTypes: true }).sort((left, right) => left.name.localeCompare(right.name))) {
-      const absolute = join(current, entry.name)
-      if (entry.isDirectory()) walk(absolute)
-      else if (entry.isFile()) {
-        files.push({
-          relative: relative(root, absolute).split('\\').join('/'),
-          bytes: statSync(absolute).size,
-          digest: sha256(absolute),
-        })
-      }
-    }
-  }
-  walk(root)
-  return files
-}
-
 function humanBytes(bytes) {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
   return `${(bytes / 1024 / 1024).toFixed(2)} MB`
 }
 
-/**
- * rename 跨卷会失败：Windows 报 EXDEV（ERROR_NOT_SAME_DEVICE），退化为复制 + 删除
- * （只有源目录完整复制成功才删）。Windows 上 EPERM/EACCES/EBUSY 通常意味着目录正
- * 被宿主轮询、杀软或编辑器占用，给出可操作的提示而不是裸错误。
- */
-function moveDirectory(from, to) {
-  try {
-    renameSync(from, to)
-  } catch (error) {
-    const code = error !== null && typeof error === 'object' ? error.code : undefined
-    if (code === 'EXDEV') {
-      cpSync(from, to, { recursive: true })
-      rmSync(from, { recursive: true, force: true })
-      return
-    }
-    if (WINDOWS && (code === 'EPERM' || code === 'EACCES' || code === 'EBUSY')) {
-      fail(`移动失败（${code}）：目标可能正被占用。关闭占用 ${from} 的程序（宿主轮询、杀软扫描、编辑器）后重试。原始错误：${error instanceof Error ? error.message : String(error)}`)
-    }
-    throw error
-  }
-}
-
-function printInstallPlan({ manifest, entry, packDir, target, files, execute }) {
+function printInstallPlan({ plan, home, execute }) {
   const title = execute ? '安装（写入）' : '安装（dry-run）'
   console.log(`dsh-adapt-packs · ${title}`)
   console.log('')
-  console.log(`包：      ${manifest.id} ${manifest.version}（catalog: ${entry.status} / risk ${entry.risk} / default ${entry.default}）`)
-  console.log(`来源：    ${packDir}`)
-  console.log(`DSH_HOME：${dshHome()}`)
-  console.log(`目标：    ${target}`)
-  console.log(`目标状态：${existsSync(target) ? '已存在（--yes 会拒绝覆盖）' : '不存在'}`)
+  console.log(`包：      ${plan.manifest.id} ${plan.manifest.version}（catalog: ${plan.entry.status} / risk ${plan.entry.risk} / default ${plan.entry.default}）`)
+  console.log(`来源：    ${plan.packDir}`)
+  console.log(`DSH_HOME：${home}`)
+  console.log(`目标：    ${plan.target}`)
+  console.log(`目标状态：${plan.exists ? '已存在（--yes 会拒绝覆盖）' : '不存在'}`)
   console.log('')
-  console.log(`文件（${files.length}）：`)
-  for (const file of files) {
+  console.log(`文件（${plan.files.length}）：`)
+  for (const file of plan.files) {
     console.log(`  ${file.relative.padEnd(20)} ${humanBytes(file.bytes).padStart(9)}  sha256:${file.digest.slice(0, 12)}`)
   }
   console.log('')
   console.log('动作：')
-  console.log(`  ${mkdirCommand(dirname(target))}`)
-  console.log(`  ${copyCommand(packDir, target)}`)
+  console.log(`  ${mkdirCommand(dirname(plan.target))}`)
+  console.log(`  ${copyCommand(plan.packDir, plan.target)}`)
   console.log('')
   console.log('回滚（移走目录，可恢复）：')
-  console.log(`  node tools/install.mjs --uninstall ${manifest.id} --yes`)
-  console.log(`  或手工：${moveCommand(target, join(dshHome(), 'mobile-access-adapt-disabled', manifest.id))}`)
-  console.log(`  或手工删除：${removeCommand(target)}`)
+  console.log(`  node tools/install.mjs --uninstall ${plan.manifest.id} --yes`)
+  console.log(`  或手工：${moveCommand(plan.target, join(home, 'mobile-access-adapt-disabled', plan.manifest.id))}`)
+  console.log(`  或手工删除：${removeCommand(plan.target)}`)
   console.log('')
   if (execute === false) {
     console.log('dry-run：未写入任何文件。确认无误后加 --yes 执行。')
   } else {
-    console.log(`已安装。${MAX_RAIL_NOTE}`)
+    console.log(`已安装。${HOT_RELOAD_NOTE}`)
   }
 }
 
 function install(options) {
-  const packDir = join(PACKS_DIR, options.id)
-  if (existsSync(packDir) === false || statSync(packDir).isDirectory() === false) fail(`仓库里没有 packs/${options.id}`)
-  const manifest = readManifest(packDir)
-  const entry = readCatalogEntry(options.id)
-  const target = join(dshHome(), 'mobile-access', 'extensions', options.id)
-  const files = listFiles(packDir)
+  const home = resolveDshHome()
   const execute = options.yes === true
-
-  if (execute === true && existsSync(target) === true) {
-    fail(`目标已存在，拒绝覆盖：${target}\n先回滚：node tools/install.mjs --uninstall ${options.id} --yes`)
+  let plan
+  try {
+    plan = planInstall({ home, id: options.id })
+  } catch (error) {
+    if (error instanceof PackError) fail(error.message, error.hint)
+    throw error
   }
-
-  printInstallPlan({ manifest, entry, packDir, target, files, execute })
+  if (execute === true && plan.exists === true) {
+    fail(`目标已存在，拒绝覆盖：${plan.target}\n先回滚：node tools/install.mjs --uninstall ${options.id} --yes`)
+  }
+  printInstallPlan({ plan, home, execute })
   if (execute === false) return
-  mkdirSync(dirname(target), { recursive: true })
-  cpSync(packDir, target, { recursive: true })
+  const result = installPack({ home, id: options.id })
   console.log('')
-  console.log(`已写入 ${files.length} 个文件到 ${target}`)
+  console.log(`已写入 ${result.written} 个文件到 ${result.target}`)
 }
 
 function uninstall(options) {
-  const target = join(dshHome(), 'mobile-access', 'extensions', options.id)
-  const disabledRoot = join(dshHome(), 'mobile-access-adapt-disabled')
+  const home = resolveDshHome()
+  const target = join(home, 'mobile-access', 'extensions', options.id)
+  const disabledRoot = join(home, 'mobile-access-adapt-disabled')
   const disabledBase = join(disabledRoot, options.id)
   const execute = options.yes === true
   const stamp = new Date().toISOString().replace(/[:.]/g, '-')
@@ -283,7 +192,7 @@ function uninstall(options) {
 
   console.log(`dsh-adapt-packs · 卸载（${execute ? '写入' : 'dry-run'}）`)
   console.log('')
-  console.log(`DSH_HOME：${dshHome()}`)
+  console.log(`DSH_HOME：${home}`)
   console.log(`目标：    ${target}`)
   console.log(`移出到：  ${disabled}`)
   console.log('')
@@ -303,10 +212,9 @@ function uninstall(options) {
     console.log('dry-run：未移动任何文件。确认无误后加 --yes 执行。')
     return
   }
-  mkdirSync(disabledRoot, { recursive: true })
-  moveDirectory(target, disabled)
-  console.log(`已移出。${MAX_RAIL_NOTE}`)
-  console.log(`回滚位置：${disabled}`)
+  const result = uninstallPack({ home, id: options.id })
+  console.log(`已移出。${HOT_RELOAD_NOTE}`)
+  console.log(`回滚位置：${result.disabled}`)
 }
 
 const options = parseArgs(process.argv.slice(2))

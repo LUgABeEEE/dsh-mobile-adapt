@@ -1,0 +1,13 @@
+# dsh-adapt-packs — DSH bundle patch
+#
+# One Loader row. The host half (`lib/index.mjs`) registers /api/adapt-packs and
+# the client half (`lib/client.js`) adds the 「插件适配」 settings section; the
+# package.json `dsh.bundle` field points DSH at this file.
+#
+# Disable it without uninstalling by targeting the row id in a profile patch:
+#
+#   - id: adapt-packs
+#     disabled: true
+- insert:
+    - id: adapt-packs
+      name: 'dsh-adapt-packs'

@@ -1,13 +1,15 @@
 {
   "name": "dsh-adapt-packs",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
   "description": "Opt-in adaptation packs for the DSH mobile surface (a host-aware 44px touch floor, icon-button width, width reclaim, floating-widget clearance) plus a compatibility list of third-party plugins on a phone.",
   "license": "MIT",
   "scripts": {
     "list": "node tools/cli.mjs list",
     "check": "node tools/check-pack.mjs",
-    "prepublishOnly": "node tools/cli.mjs list"
+    "prepublishOnly": "node --test && node tools/cli.mjs list",
+    "test": "node --test",
+    "verify": "node --test && node tools/cli.mjs list"
   },
   "repository": {
     "type": "git",
@@ -28,7 +30,8 @@
     "adaptation-packs",
     "dsh-plugin",
     "compatibility-list",
-    "mobile-accessibility"
+    "mobile-accessibility",
+    "cordis"
   ],
   "author": "LUgABeEEE",
   "bin": {
@@ -36,6 +39,8 @@
     "dsh-adapt": "tools/cli.mjs"
   },
   "files": [
+    "lib/",
+    "cordis.patch.yml",
     "packs/",
     "catalog.json",
     "compat.json",
@@ -49,5 +54,20 @@
   },
   "publishConfig": {
     "access": "public"
+  },
+  "main": "lib/index.mjs",
+  "exports": {
+    ".": "./lib/index.mjs",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "manifestVersion": 1,
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web"
+    }
   }
 }

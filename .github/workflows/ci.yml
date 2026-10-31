@@ -32,6 +32,8 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.node }}
+      - name: Unit and handler tests
+        run: node --test
       - name: Install Playwright and Chromium
         run: |
           npm install --no-save --no-package-lock playwright
@@ -52,6 +54,8 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: "22"
+      - name: Unit and handler tests
+        run: node --test
       - name: Install Playwright and Chromium
         run: |
           npm install --no-save --no-package-lock playwright

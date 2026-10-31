@@ -64,6 +64,16 @@ The published tarball carries `packs/`, `catalog.json`, `docs/` and the tooling,
 including the evidence screenshots under `packs/<id>/shots/` (tarball ≈ 700 KB).
 `dsh-adapt-packs check` runs the same harness as the repository.
 
+### Inside DSH (the settings panel)
+
+The package is also a DSH bundle: install it the usual way and a **插件适配** section appears in Settings, where the catalog, the installed state and the compatibility list are one click apart.
+
+```bash
+dsh plugin add dsh-adapt-packs        # or install the tarball from the market
+```
+
+It uses the same `lib/store.mjs` as the CLI, so the panel cannot disagree with `dsh-adapt-packs status`. The host route is `/api/adapt-packs/{state,install,uninstall}`; nothing else is exposed.
+
 ### From a checkout
 
 ```bash
