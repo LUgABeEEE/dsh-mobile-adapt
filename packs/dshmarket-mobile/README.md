@@ -63,7 +63,9 @@ pack 不引用）。
 ## 3. 定向 fixture（`fixture.html`）
 
 `fixture.html`（142,712 B，< 256 KB）是 **dshmarket 1.73.3 真实主面板**在 390×844 下的 DOM 快照，
-用于让 `check-pack` 在「这个插件自己的面板」上做真实盒模型断言，而不是在通用 fixture 上空转：
+用于让 `check-pack` 在「这个插件自己的面板」上做真实盒模型断言，而不是在通用 fixture 上空转。
+文件契约（体积 / 禁用内容 / DOM 最小契约 / evidence 写法）见
+[`docs/定向-fixture.md`](../../docs/定向-fixture.md)（独立文档，不占收录标准章节号）：
 
 - 来源：隔离 DSH web 实例（本机 DSH 0.2.1-rc.3 + dshmarket 1.73.3）在 **390×844 @3×** 下打开
   侧栏「插件市场」入口、收起抽屉（stock web 挤压视口下抽屉是挤压式，不收只剩 110px）后捕获；
