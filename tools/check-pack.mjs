@@ -334,7 +334,7 @@ function inspectCss(report) {
       const scope = selectorScope(rule, selector)
       if (scope === null) {
         scopeFailures += 1
-        report.fail('static', 'static.css.scope', `第 ${rule.line} 行选择器不在 [data-dsh-panel] / [data-dshm-adapt-panel="1"] / (pointer: coarse) / [data-dsh-adapt="off"] 作用域内：${selector}`, { selector })
+        report.fail('static', 'static.css.scope', `第 ${rule.line} 行选择器不在 [data-dsh-panel] / 包自有 data-dsh*="1" / (pointer: coarse) / [data-dsh-adapt="off"] 作用域内：${selector}`, { selector })
       }
     }
   }
@@ -707,8 +707,9 @@ function selectorScope(rule, selector) {
   // The host's own panel-state attribute (dsh-mobile #319). Presence is enough:
   // a gate such as `:not([data-dsh-panel])` must count as panel-scoped.
   if (/\[\s*data-dsh-panel\s*(?:[~|^$*]?=\s*(?:"1"|'1'|1))?\s*\]/.test(selector)) return 'panel'
-  // The pack's own panel-state attribute (docs/收录标准.md §3).
-  if (/\[\s*data-dshm-adapt-panel\s*=\s*(?:"1"|'1'|1)\s*\]/.test(selector)) return 'panel'
+  // A pack's own state contract: any `data-dsh*="1"` attribute it writes itself
+  // (`data-dshm-adapt-panel`, `data-dsh-floaters`, `data-dshm-example-panel`, …).
+  if (/\[\s*data-dsh[\w-]*\s*=\s*(?:"1"|'1'|1)\s*\]/.test(selector)) return 'panel'
   if (/\[\s*data-dsh-adapt\s*=\s*(?:"off"|'off'|off)\s*\]/.test(selector)) return 'opt-out'
   for (const at of rule.stack) {
     if (at.name === 'media' && /\(\s*(?:any-)?pointer\s*:\s*coarse\s*\)/i.test(at.prelude)) return 'coarse'

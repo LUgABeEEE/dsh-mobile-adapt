@@ -53,7 +53,7 @@ CSS 也整段不命中，面板回到原来的 margin。
 ## 验证
 
 ```bash
-node tools/check-pack.mjs packs/floaters            # 30 passed / 0 failed / 3 skipped
+node tools/check-pack.mjs packs/floaters            # 30 passed / 0 failed / 2 skipped
 node tools/check-pack.mjs packs/floaters --desktop  # 含 1280×800 零改动
 ```
 

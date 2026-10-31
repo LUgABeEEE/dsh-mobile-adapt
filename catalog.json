@@ -113,7 +113,7 @@
       "evidence": {
         "level": "runtime-0.8.0",
         "have": [
-          "check-pack 30/0/3（3 skip：面板三组断言按 capabilities 未声明而跳过）：量出 118px、margin 118px、滚到底面板底部 ≤ 控件顶部、opt-out 归零、1280×800 零改动。",
+          "check-pack 30/0/2（2 skip：hit-target / width-reclaim 未声明）：量出 118px、margin 118px、滚到底面板底部 ≤ 控件顶部、opt-out 归零、1280×800 零改动。",
           "0.8.0 真实运行时（390×844 粗指针，Plugins 面板）：右下 `dsh-whale-widget` 实测 122×122（268…390 × 722…844），elementFromPoint(330,784) 命中它——它压在面板最后几行上。",
           "纯宿主时 `.dshm-mainContent{overflow:hidden}`（lib/mobile-layout.js:417），面板根自己滚到 844 仍被控件盖住；三包全开时 `--dshm-floaters=122px`、面板根 margin-bottom=122px、mainContent 可滚 910 vs 客户端 788（正好多出 122px）。只开 floaters 时量到 159px 是因为纯宿主对照弹出了宿主自己的 “Mobile customization could not be loaded” 提示条（同样贴底且不在 .dshm-shell 内），生产口径取 122px。【事实】实测-0.8.0-20261031.md §4.1"
         ],
@@ -158,7 +158,7 @@
       "evidence": {
         "level": "directed-fixture + stock-web-lab",
         "have": [
-          "定向 fixture 通过（不是通用 fixture）：存在 packs/dshmarket-mobile/fixture.html 时 check-pack 全轮次使用它、不回退内置 fixture；RESULT PASS（30 passed · 0 failed · 4 skipped）——390×844 粗指针下 137 个按钮最小边 28→44、图标按钮宽 28→44、输入框高 22→44；opt-out 全部回落（按钮 44→28、输入 44→22）；1280×800 精指针 + --desktop 严格零回归。",
+          "定向 fixture 通过（不是通用 fixture）：存在 packs/dshmarket-mobile/fixture.html 时 check-pack 全轮次使用它、不回退内置 fixture；RESULT PASS（29 passed · 0 failed · 3 skipped，2026-10-31 本仓库 harness 实测）——390×844 粗指针下 137 个按钮最小边 28→44、图标按钮宽 28→44、输入框高 22→44；opt-out 全部回落（按钮 44→28、输入 44→22）；1280×800 精指针 + --desktop 严格零回归。",
           "真实面板证据（stock DSH web 390×844 @3×，dshmarket 1.73.3 隔离实例捕获）：173 个可交互元素中 172 个 <44px（98.3%，最小 12.1px），搜索输入 154×24px / font-size 14px；对应 check-pack 计量口径（不含卡片 a 链接）为 138 个控件。fixture 为脱敏后的真实 DOM 快照，142,712 B（<256 KB），无脚本/外链/会话数据。",
           "dsh-ui-lab 对照（stock DSH web，390×844，隔离实例 + --inject 模拟装包）：可测控件 138，最小边 12.1→44px，<44px 计数 138→0，面板盒 334×844 @x=56 未变、横向溢出 false；截图 packs/dshmarket-mobile/shots/{before,after}-390x844.png。口径=stock web 挤窄视口，不是专用移动页。",
           "输入框 font-size:16px 由规则设置；check-pack 当前只断言输入框高度（工具未断言字号），字号效果待真实页面/真机复核。"

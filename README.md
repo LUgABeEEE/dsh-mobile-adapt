@@ -119,15 +119,15 @@ Each pack stops applying entirely — panel spacing returns to its own values, s
 | | state |
 | --- | --- |
 | Fixture measurement: 390×844 coarse pointer, 1280×800 fine pointer zero-regression, opt-out | ✅ every pack (`node tools/check-pack.mjs`) |
-| Fixture measurement on Windows 11 + Chromium (`node tools/check-pack.mjs --desktop`) | ✅ every pack: 87 passed / 0 failed / 8 skipped (2026-10-31); the same suite runs in CI on `windows-latest` |
+| Fixture measurement on Windows 11 + Chromium (`node tools/check-pack.mjs --desktop`) | ✅ every pack (2026-10-31, earlier suite: 87 passed / 0 failed / 8 skipped; the suite changed since — CI on `windows-latest` runs the current one) |
 | Real runtime on **dsh-mobile 0.8.0** | ✅ measured on the real gateway (390×844, coarse pointer, Plugins panel) — see `实测-0.8.0-20261031.md` in the workspace |
-| Real runtime on **main after #319** | ❌ no build contains it yet (v0.8.1 does not exist); merge diff + a `check-pack` host-probe only |
-| Real runtime on **0.7.1** | ✅ historically (2026-10-31 earlier run); its numbers matched 0.8.0 |
+| Real runtime on **main after #319** | ❌ no build contains it yet (verified 2026-10-31: latest release/tag/npm is v0.8.0); merge diff + a `check-pack` host-probe only |
+| Real runtime on **0.7.1** | ✅ historically (2026-10-31 earlier run); the 122px / 36→44px numbers were the same as 0.8.0 |
 | Physical device | ❌ never — no thumb, no soft keyboard, no real `env(safe-area-inset-*)` |
 
 ### Two release lines: 0.8.0 vs main (#319)
 
-`dsh-mobile` merged #319 on 2026-10-31 (`6c50b13`), **after** v0.8.0 was published (2026-10-30). No release contains it yet:
+`dsh-mobile` merged #319 on 2026-10-31 (`6c50b13`), **after** v0.8.0 was published (2026-10-30). No release contains it yet (checked 2026-10-31: latest release, latest tag and npm `latest` are all 0.8.0):
 
 | | release 0.8.0 | main after #319 |
 | --- | --- | --- |

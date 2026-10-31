@@ -3,7 +3,7 @@
  * 复制到 packs/<id>/ 后，把这段注释换成这张包的实际说明：
  * - 目标插件与实测版本（必须点名，禁止「适配所有插件」）
  * - 只实现 catalog.json 里勾过的能力，未勾的能力不得出现对应选择器
- * - 所有选择器都要收敛到目标面板（`[data-dsh-panel="1"]` 或该插件自己的根标记），不得裸写全局 button/input
+ * - 所有选择器都要收敛到目标面板（包自有状态如 `[data-dshm-adapt-panel="1"]`、宿主的 `[data-dsh-panel]` 门阀，或该插件自己的根标记），不得裸写全局 button/input
  * - 必须实现 opt-out：目标插件根 `[data-dsh-adapt="off"]` 或文档化的面板级 CSS 变量
  * - 自造标记优先用 attribute，不依赖 `:has`（兼容没有 `:has` 的 WebView）
  *

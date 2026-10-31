@@ -46,6 +46,8 @@ opt-out 可以在页面生命周期里切换，`data-dsh-adapt` 的属性变化�
 
 **注意**：本包的 CSS 与 shim 是同一个状态开关。只加载 `mobile.css` 而没有 `mobile.js` 时，`data-dshm-adapt-panel` 永远不会被写上，规则整体不生效（这是刻意的：没有状态就没有适配）。宿主自己写 `data-dsh-panel` 时，本包的高度地板/宽度回收本来就会退让。
 
+**升级注意**：0.1.0 的旧 shim 也写宿主的 `data-dsh-panel`。升级时必须 CSS 与 JS 一起换（扩展是整目录替换，正常 `install`/覆盖不会出现半套）；如果只换了 `mobile.css`、旧 shim 还在写 `data-dsh-panel`，新 CSS 会把它误当「宿主已接管」而退让。用 `--inject` 在**已装旧扩展**的页面上试新包时也会撞到这个现象。
+
 ## 3. 用到的宿主标记（债务登记）
 
 | 标记 | 用途 | 登记位置 |
