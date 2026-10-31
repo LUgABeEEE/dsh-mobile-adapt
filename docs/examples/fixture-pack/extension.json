@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "id": "fixture-pack",
+  "name": "Fixture Pack (example)",
+  "version": "0.1.0",
+  "description": "演示 packs/<id>/fixture.html 的示例包：定向 fixture + 44px 触控地板 + 56px 轨道让位 + 浮动控件让位，仅用于 check-pack 的两个方向回归。"
+}
