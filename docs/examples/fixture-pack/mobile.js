@@ -2,7 +2,7 @@
  *
  * 只做宿主替不了的两件事：把“面板是否打开”和折叠轨道宽度写到 DOM 上，以及
  * 量出定向 fixture 里 [data-fixture="floater"] 占用的高度。完整说明见
- * docs/收录标准.md §11。
+ * docs/定向-fixture.md。
  */
 window.dshMobile.define({
   apiVersion: 1,

@@ -16,4 +16,4 @@ node tools/check-pack.mjs docs/examples/fixture-pack --desktop
 把 `fixture.html` 临时移走后重跑，报告会打印 `fixture：内置（回退内置 fixture）`，
 并且浮动控件相关断言会失败——这说明定向 fixture 不是装饰，缺了它就不能伪装通过。
 
-契约与字段说明见 [`docs/收录标准.md`](../../收录标准.md) §11。
+契约与字段说明见 [`docs/定向-fixture.md`](../../定向-fixture.md)。

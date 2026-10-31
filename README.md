@@ -45,7 +45,7 @@ The built-in fixture measures a generic, deliberately desktop-first plugin panel
 node tools/check-pack.mjs docs/examples/fixture-pack --desktop   # runnable example
 ```
 
-The contract — allowed markup (DOM + inline styles only, no scripts/external references, ≤ 256 KB), the required shell/panel hooks, how `target` / `usesHostMarkers` / `evidence` must describe the fixture — is in [`docs/收录标准.md`](docs/收录标准.md) §10. `docs/examples/fixture-pack/` is a runnable example, not a real pack: it lives outside `packs/`, is not in `catalog.json`, and therefore reports one harmless catalog warning.
+The contract — allowed markup (DOM + inline styles only, no scripts/event handlers/external or `data:` references, ≤ 256 KB), the required shell/panel hooks, how `target` / `usesHostMarkers` / `evidence` must describe the fixture — is in [`docs/定向-fixture.md`](docs/定向-fixture.md). `docs/examples/fixture-pack/` is a runnable example, not a real pack: it lives outside `packs/`, is not in `catalog.json`, and therefore reports one harmless catalog warning.
 
 ## Opt out
 
