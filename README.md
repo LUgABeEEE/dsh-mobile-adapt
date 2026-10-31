@@ -2,7 +2,7 @@
 
 **Opt-in adaptation packs for the DSH mobile surface.**
 
-Third-party plugin panels on a phone have three problems a plugin cannot fix from inside its own component: touch targets a thumb cannot hit, a panel root wider than the phone's content box, and rows hidden underneath a floating widget. This repository is a small registry of fixes for exactly those, delivered as packs that `dsh-mobile` loads through its public `extensions/` directory.
+Third-party plugin panels on a phone have three problems a plugin cannot fix from inside its own component: touch targets a thumb cannot hit, a panel root wider than the phone's content box, and rows hidden underneath a floating widget. This repository is a small registry of fixes for exactly those, delivered as packs that `dsh-mobile` loads through its public `extensions/` directory — plus a [compatibility list](compat.json) recording, per third-party plugin, whether it is usable on a phone as shipped, needs one of these packs, should be fixed upstream, or cannot be fixed from outside at all.
 
 Nothing here forks or patches an installed DSH or dsh-mobile. A pack is a directory:
 
@@ -23,8 +23,29 @@ Copy it in and the host picks it up within two seconds; move it out and it is go
 | [`core-panel`](packs/core-panel/) | plugin panels | 44px hit floor inside a panel — the only source on 0.8.x, and a fallback that backs off once the host ships its own floor (#319); icon-only button width; width reclaim |
 | [`shell-chrome`](packs/shell-chrome/) | the shell itself | the open drawer's sidebar rows (36 → 44px); the "back to conversation" bar becomes a rise-only floor that never shrinks the host's own 48px |
 | [`floaters`](packs/floaters/) | floating widgets | measures bottom-right fixed widgets, reserves their height, so the last rows stop hiding underneath |
+| [`dshmarket-mobile`](packs/dshmarket-mobile/) | the plugin market panel | a 44px touch floor for `dshmarket` 1.73.x: buttons, icon buttons and the search field, scoped to `[data-dsh-market-root]` |
 
 Every pack is **experimental** and **off by default**. `catalog.json` records, per pack, what has actually been verified and what has not — the `evidence` field is meant to be read before trusting one.
+
+## The compatibility list
+
+Not every plugin can be fixed from the outside — and "this one is fine on a phone" is worth writing down too. [`compat.json`](compat.json) records one verdict per third-party plugin:
+
+```bash
+dsh-adapt-packs compat                  # the whole list
+dsh-adapt-packs compat --verdict pack    # only entries this repository has a pack for
+```
+
+| verdict | meaning |
+| --- | --- |
+| `native` | usable on a phone as shipped |
+| `pack` | this repository has a pack for it (`pack` names it) |
+| `upstream` | fixable, but only by the plugin author |
+| `blocked` | not fixable from outside (canvas, native widgets, no reachable DOM) |
+
+Every entry carries the version it was judged on, what the phone actually does (numbers where possible) and how strong the evidence is — measured, code-read, or not verified. Format and rules: [`docs/兼容清单.md`](docs/兼容清单.md). To suggest an entry, open the [compat suggestion](https://github.com/LUgABeEEE/dsh-adapt-packs/issues/new?template=compat-suggestion.yml) issue and bring numbers rather than adjectives.
+
+`dsh-adapt-packs status` answers the other question — which packs this machine has installed, which are disabled, and which are in the catalog but not installed.
 
 ## Install
 

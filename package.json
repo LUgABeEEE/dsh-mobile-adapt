@@ -1,8 +1,8 @@
 {
   "name": "dsh-adapt-packs",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
-  "description": "Opt-in adaptation packs for the DSH mobile surface: 44px touch floor, rail clearance and floating-widget clearance for third-party plugin panels, loaded through dsh-mobile extensions.",
+  "description": "Opt-in adaptation packs for the DSH mobile surface (44px touch floor, rail clearance, floating-widget clearance) plus a compatibility list of third-party plugins on a phone.",
   "license": "MIT",
   "scripts": {
     "list": "node tools/cli.mjs list",
@@ -26,7 +26,9 @@
     "touch-targets",
     "css",
     "adaptation-packs",
-    "dsh-plugin"
+    "dsh-plugin",
+    "compatibility-list",
+    "mobile-accessibility"
   ],
   "author": "LUgABeEEE",
   "bin": {
@@ -36,6 +38,7 @@
   "files": [
     "packs/",
     "catalog.json",
+    "compat.json",
     "docs/",
     "tools/",
     "README.md",

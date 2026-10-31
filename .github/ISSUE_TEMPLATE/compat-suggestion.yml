@@ -1,0 +1,82 @@
+name: 插件适配建议
+description: 报告一个第三方插件在手机上的适配情况（无所谓好坏，只要能复核的事实）
+title: "[compat] 插件名 在手机上的表现"
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        谢谢帮忙！这份清单只记录**可复核的事实**，不收录评价。
+        先看一遍 [兼容清单的格式与判据](https://github.com/LUgABeEEE/dsh-adapt-packs/blob/main/docs/%E5%85%BC%E5%AE%B9%E6%B8%85%E5%8D%95.md)。
+
+  - type: input
+    id: plugin
+    attributes:
+      label: 插件
+      description: npm 包名（尽量带 scope）或 GitHub 仓库
+      placeholder: dshmarket / @nanmicoder/dsh-agent-teams / https://github.com/…
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: 版本
+      description: 结论对应的版本。`npm view <包名> version` 或本地装的版本
+      placeholder: "1.73.3"
+    validations:
+      required: true
+
+  - type: textarea
+    id: symptom
+    attributes:
+      label: 手机上的具体表现
+      description: 尽量给数字与控件名（"搜索框 154×24""按钮高 28px"），比"太小"有用
+      placeholder: |
+        390×844 下打开插件市场主面板：
+        - 搜索框 154×24px，字号 14px
+        - 图标按钮 28×26px
+    validations:
+      required: true
+
+  - type: input
+    id: environment
+    attributes:
+      label: 环境
+      description: 真机（机型/系统/WebView 版本）或 headless 视口尺寸
+      placeholder: Pixel 7 / Android 15 / WebView 137；或 headless 390×844
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 证据
+      description: 截图、录屏，或代码里的 file:line。没实测就写明"未实测"
+      placeholder: 截图 / client.js:2148 的 padding-right: 420px
+    validations:
+      required: false
+
+  - type: dropdown
+    id: verdict
+    attributes:
+      label: 你倾向的结论
+      description: 不确定就选"不确定"，维护者会判断
+      options:
+        - native（原生可用，不用管）
+        - pack（本仓库可以做一个包）
+        - upstream（只能插件作者改）
+        - blocked（自绘/原生，做不了）
+        - 不确定
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: 确认
+      options:
+        - label: 我写的是可复核的事实，不是评价或营销词
+          required: true
+        - label: 截图里没有会话内容、配对码、token 等敏感信息
+          required: true

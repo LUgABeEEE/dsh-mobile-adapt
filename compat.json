@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "updated": "2026-10-31",
+  "note": "第三方 DSH 插件在手机上的适配结论。verdict: native=原生可用无需干预；pack=本仓库有对应适配包；upstream=建议插件作者自己改；blocked=当前架构下做不了（自绘/原生/无面板 DOM）。证据等级写在 evidence 里，没有实测的一律标未验证。",
+  "entries": [
+    {
+      "plugin": "dshmarket",
+      "name": "插件市场",
+      "version": "1.73.3",
+      "range": ">=1.73.3 <1.74.0",
+      "verdict": "pack",
+      "pack": "dshmarket-mobile",
+      "category": "market",
+      "summary": "面板根有 data-dsh-market-* 标记，是唯一 A 档（可被适配包点名）的高星插件。",
+      "mobile": "390×844 实测：173 个可交互元素中 172 个 <44px（最小 12.1px），搜索框 154×24、字号 14px。装包后可测控件最小边 12.1→44px。",
+      "evidence": "directed-fixture + stock-web-lab；catalog.json 的 dshmarket-mobile 条目记录缺什么。",
+      "links": {
+        "repo": "https://github.com/dsh-market/dsh-market",
+        "npm": "dshmarket"
+      }
+    },
+    {
+      "plugin": "@nanmicoder/dsh-agent-teams",
+      "name": "多 Agent 协作面板",
+      "version": "0.1.27",
+      "verdict": "upstream",
+      "category": "workflow",
+      "summary": "真实 DOM 有自有标记（data-agent-teams-*），但不是 data-dsh*，check-pack 静态层不允许 pack 点名。",
+      "mobile": "面板打开时给会话区加 padding-right: 420px，390px 视口下会横向挤走内容；移动专用布局没有右栏，核心价值被压缩。",
+      "evidence": "静态代码阅读（client.js:780 / 2148 / 3182）；移动端是否真触发未实测。",
+      "links": {
+        "repo": "https://github.com/NanmiCoder/dsh-agent-teams",
+        "npm": "@nanmicoder/dsh-agent-teams"
+      }
+    },
+    {
+      "plugin": "dsh-context",
+      "name": "上下文 / 成本面板",
+      "version": "0.78.0",
+      "verdict": "upstream",
+      "category": "usage",
+      "summary": "主面板 + composer overlay，已有容器查询；改造点集中在触控尺寸与 hover-only 提示。",
+      "mobile": "11px 控件、15px 搜索清除按钮、hover 才出现的提示；字体与命中区在手机上偏小。",
+      "evidence": "静态代码阅读（src/client/）；真机未验证。",
+      "links": {
+        "repo": "https://github.com/bowenliang123/dsh-context",
+        "npm": "dsh-context"
+      }
+    },
+    {
+      "plugin": "dsh-purge",
+      "name": "清理 / 回滚",
+      "version": "1.1.85",
+      "verdict": "upstream",
+      "category": "tools",
+      "summary": "composer 工具栏按钮 + 全屏 dock + 36px 悬浮球；标记打在 <style> 上，不是面板 DOM，pack 无法点名。",
+      "mobile": "620px / 72vh 的固定 dock 在 390px 视口下几乎占满；36px 悬浮球低于 44px 下限，且会压住面板最后几行。",
+      "evidence": "静态代码阅读（client.js:8644-8664 / 8904 / 8939 / 9004）；未安装实测。",
+      "links": {
+        "repo": "https://github.com/YuJunZhiXue/dsh-purge",
+        "npm": "dsh-purge"
+      }
+    }
+  ]
+}
