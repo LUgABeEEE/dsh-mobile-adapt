@@ -1,6 +1,6 @@
-# Linux 上的「手机实例」
+# 无头「手机实例」（Linux / macOS / Windows）
 
-2026-10-30 · 给迭代调试用：在一台 Linux 机器上把**真实移动页**跑起来，390×844 粗指针，10 秒一轮，不碰手机。
+2026-10-30 · 给迭代调试用：在开发机上把**真实移动页**跑起来，390×844 粗指针，10 秒一轮，不碰手机。脚本不依赖 POSIX shell；Windows 说明见下文「Windows 上运行」。
 
 ## 它是什么
 
@@ -35,7 +35,18 @@ node tools/phone-instance.mjs --fresh                           # 丢掉缓存�
 4. 保存 `storageState`，之后直接复用。
 
 **不会**改电脑默认设置、不会重启 dsh-mobile、不会动真实手机。唯一持久变化是 `devices.json`
-里多一条 `linux-headless` 设备记录，可以在电脑端「移动访问 → 设备」里撤销。
+里多一条 `<platform>-headless` 设备记录（Linux 为 `linux-headless`、Windows 为 `windows-headless`、macOS 为 `darwin-headless`），可以在电脑端「移动访问 → 设备」里撤销。
+
+## Windows 上运行
+
+Windows 10/11 + PowerShell 与 Linux 走同一套脚本，需要额外确认的只有三件事：
+
+1. **Playwright + Chromium**：若 `DSH_HOME` 的 profile 里已经装了 Playwright，仍要确认有浏览器；否则在仓库根目录执行
+   `npm install --no-save --no-package-lock playwright` 和 `npx playwright install chromium`（Windows 不要给 `playwright install` 加 `--with-deps`，那是 Linux 参数）。
+2. **DSH_HOME**：PowerShell 写 `$env:DSH_HOME = 'C:\Users\you\.dsh'`；不设置时缺省 `%USERPROFILE%\.dsh`，一般不用设。
+3. **本机管理 API**：确认桌面端 DSH 正在运行且「移动访问 → 局域网」已开。脚本访问 `http://127.0.0.1:3080` 失败时会直接提示，不再打印裸堆栈。
+
+其余与 Linux 相同：`--inject packs/core-panel` 的路径 `\` 和 `/` 都可以；截图在 `.cache\shots\`；首次用 Chromium 访问 LAN IP 时 Windows 防火墙可能弹窗，允许「专用网络」即可。`env(safe-area-inset-*)`、软键盘、`visualViewport` 在 Windows 无头浏览器里依然是 0 / 不收缩，真机验证不可省。
 
 ## 三个坑（都踩过）
 

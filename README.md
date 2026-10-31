@@ -37,6 +37,27 @@ node tools/install.mjs --uninstall core-panel --yes
 
 `install.mjs` defaults to a dry run, resolves `$DSH_HOME` (or `~/.dsh`), refuses to overwrite an existing pack, and moves an uninstalled pack to `mobile-access-adapt-disabled/` so it can be restored.
 
+## Windows
+
+`tools/` are plain Node scripts (Node 20+); nothing here assumes a POSIX shell, `/tmp`, or case-sensitive paths, and the commands work unchanged in PowerShell. The fixture checker needs Playwright and its Chromium build:
+
+```powershell
+npm install --no-save --no-package-lock playwright
+npx playwright install chromium      # downloads into %LOCALAPPDATA%\ms-playwright
+```
+
+`check-pack.mjs` resolves Playwright in this order and lists every path it tried when it fails: `DSH_PLAYWRIGHT` (a `playwright/index.js` file **or** the `playwright` package directory) → `$DSH_HOME/profiles/{web,desktop,headless}/node_modules/playwright` → this repository's own `node_modules` → normal module resolution. A missing Chromium produces a message that points at `npx playwright install chromium` and at the expected browser cache (`%LOCALAPPDATA%\ms-playwright` on Windows).
+
+Set the home directory with PowerShell syntax — the POSIX `export` form does not apply:
+
+```powershell
+$env:DSH_HOME = 'C:\Users\you\.dsh'   # default when unset: %USERPROFILE%\.dsh
+```
+
+`install.mjs` derives `mobile-access\extensions\<id>` from it and moves an uninstalled pack to `mobile-access-adapt-disabled\<id>`. Paths with a leading `~` are expanded, and `\` and `/` are both accepted where a pack path is expected. Existing pack directories are resolved case-insensitively (`PACKS\CORE-PANEL` is `packs/core-panel`), while pack ids and `catalog.json` lookups stay lowercase. CRLF checkouts are supported: the `windows-latest` job in CI runs the whole fixture suite from a CRLF working tree on every push/PR.
+
+One path is not exercised by a normal install: the EXDEV fallback in `install.mjs` (copy + delete instead of `rename`). Install source and target both live under the same `$DSH_HOME`, so a plain rename is what actually runs; the fallback stays for unusually mounted homes and is documented rather than claimed as tested.
+
 ## Opt out
 
 ```html
@@ -50,6 +71,7 @@ Each pack stops applying entirely — panel spacing returns to its own values, s
 | | state |
 | --- | --- |
 | Fixture measurement: 390×844 coarse pointer, 1280×800 fine pointer zero-regression, opt-out | ✅ every pack (`node tools/check-pack.mjs`) |
+| Fixture measurement on Windows 11 + Chromium (`node tools/check-pack.mjs --desktop`) | ✅ every pack: 87 passed / 0 failed / 8 skipped (2026-10-31); the same suite runs in CI on `windows-latest` |
 | Real runtime on **dsh-mobile 0.7.1** | ✅ measured on a real gateway |
 | Real runtime on **0.8.0** | ❌ text-level check of `lib/mobile-layout.js` only |
 | Physical device | ❌ never — no thumb, no soft keyboard, no real `env(safe-area-inset-*)` |

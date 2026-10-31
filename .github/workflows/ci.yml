@@ -1,7 +1,8 @@
 # Continuous integration for dsh-mobile-adapt.
 #
-# The pack harness measures a fixture in a browser, so this job installs Chromium.
-# A job that looks green because it skipped the measurement would be worse than none.
+# The pack harness measures a fixture in a browser, so the Ubuntu and Windows jobs
+# install Chromium. A job that looks green because it skipped the measurement would
+# be worse than none.
 name: ci
 
 on:
@@ -37,3 +38,23 @@ jobs:
           npx playwright install --with-deps chromium
       - name: Validate every pack
         run: node tools/check-pack.mjs
+
+  # The tooling is used from Linux, macOS and Windows. This job keeps Windows a
+  # first-class target: it exercises path joins, the case-insensitive filesystem
+  # and (with Git for Windows' default checkout) CRLF line endings, and it runs
+  # the stricter --desktop parity assertions that the Ubuntu job leaves optional.
+  packs-windows:
+    name: packs (windows, node 22)
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install Playwright and Chromium
+        run: |
+          npm install --no-save --no-package-lock playwright
+          npx playwright install chromium
+      - name: Validate every pack on Windows
+        run: node tools/check-pack.mjs --desktop
