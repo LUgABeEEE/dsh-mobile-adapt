@@ -1,4 +1,4 @@
-# dsh-mobile-adapt
+# dsh-adapt-packs
 
 **Opt-in adaptation packs for the DSH mobile surface.**
 
@@ -27,6 +27,23 @@ Copy it in and the host picks it up within two seconds; move it out and it is go
 Every pack is **experimental** and **off by default**. `catalog.json` records, per pack, what has actually been verified and what has not — the `evidence` field is meant to be read before trusting one.
 
 ## Install
+
+### From npm
+
+```bash
+npm install -g dsh-adapt-packs
+
+dsh-adapt-packs list                          # what is in the catalog
+dsh-adapt-packs install core-panel --dry-run  # plan only
+dsh-adapt-packs install core-panel --yes      # write into $DSH_HOME
+dsh-adapt-packs uninstall core-panel --yes    # move it out (reversible)
+```
+
+The published tarball carries `packs/`, `catalog.json`, `docs/` and the tooling,
+including the evidence screenshots under `packs/<id>/shots/` (tarball ≈ 700 KB).
+`dsh-adapt-packs check` runs the same harness as the repository.
+
+### From a checkout
 
 ```bash
 node tools/check-pack.mjs                     # validate every pack first

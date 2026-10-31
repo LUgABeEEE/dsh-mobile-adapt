@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * dsh-mobile-adapt · 安装 / 卸载（回滚）
+ * dsh-adapt-packs · 安装 / 卸载（回滚）
  *
  * 把 packs/<id>/ 复制到 dsh-mobile 的扩展运行时目录，或把它移走。
  * 运行时目录由 $DSH_HOME 推导（缺省 ~/.dsh）：
@@ -223,7 +223,7 @@ function moveDirectory(from, to) {
 
 function printInstallPlan({ manifest, entry, packDir, target, files, execute }) {
   const title = execute ? '安装（写入）' : '安装（dry-run）'
-  console.log(`dsh-mobile-adapt · ${title}`)
+  console.log(`dsh-adapt-packs · ${title}`)
   console.log('')
   console.log(`包：      ${manifest.id} ${manifest.version}（catalog: ${entry.status} / risk ${entry.risk} / default ${entry.default}）`)
   console.log(`来源：    ${packDir}`)
@@ -281,7 +281,7 @@ function uninstall(options) {
   const stamp = new Date().toISOString().replace(/[:.]/g, '-')
   const disabled = existsSync(disabledBase) ? `${disabledBase}-${stamp}` : disabledBase
 
-  console.log(`dsh-mobile-adapt · 卸载（${execute ? '写入' : 'dry-run'}）`)
+  console.log(`dsh-adapt-packs · 卸载（${execute ? '写入' : 'dry-run'}）`)
   console.log('')
   console.log(`DSH_HOME：${dshHome()}`)
   console.log(`目标：    ${target}`)
