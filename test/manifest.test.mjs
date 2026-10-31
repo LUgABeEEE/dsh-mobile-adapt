@@ -95,6 +95,22 @@ test('apply registers the prefix route on a webServer and the route answers', as
   assert.ok(Array.isArray(body.packs))
 })
 
+test('a context without settings.section degrades instead of failing the bundle', () => {
+  let captured = null
+  const sandbox = {
+    window: { __ModuleLoader__: { load: definition => { captured = definition } } },
+    document: { createElement: () => ({ setAttribute() {}, remove() {}, textContent: '' }), head: { appendChild() {} } },
+    console: { warn() {} },
+  }
+  vm.createContext(sandbox)
+  vm.runInContext(readFileSync(join(ROOT, 'lib/client.js'), 'utf8'), sandbox, { filename: 'client.js' })
+  const ReactStub = { createElement: () => null, useState: value => [value, () => {}], useEffect: () => {}, useCallback: fn => fn }
+  const client = captured.factory(() => ReactStub)
+  const slots = { inject() { throw new Error('no such slot') }, register: () => () => {} }
+  assert.doesNotThrow(() => client.apply({ get: () => slots, slots, effect: () => {} }))
+  assert.doesNotThrow(() => client.apply({}))
+})
+
 test('the host half exports a plugin whose apply tolerates a webServer-less context', async () => {
   const plugin = (await import('../lib/index.mjs')).default
   assert.equal(plugin.name, 'adapt-packs')

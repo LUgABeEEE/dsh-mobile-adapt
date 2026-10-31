@@ -5,6 +5,10 @@
 
 ## [Unreleased]
 
+### Fixed（0.3.2）
+
+- 设置分区注册失败不再让整条 bundle 判 failed：在缺少 `settings.section` 的 profile（例如只有 `dsh-base + dsh-web-app`）里，`slots.inject` 会抛异常，之前会把 `dsh-adapt-packs: failed` 带进 web boot；现在静默降级（控制台留一条 warn，CLI 不受影响）。补了一条测试。
+
 ### Fixed（设置页 UI，0.3.1）
 
 - 「安装」主按钮在深色主题下不可见：原先用 `--dsw-alias-label-primary` 当底色、`--dsw-alias-bg-base` 当字色，两个 token 在深色主题下可能同时接近白色；改成中性半透明底 + `currentColor` 描边 + 加粗，两种主题都可见。
