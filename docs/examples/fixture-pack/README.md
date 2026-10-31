@@ -11,7 +11,7 @@ fixture 上过静态层。它把自己的面板状态写成 `data-dshm-example-p
 node tools/check-pack.mjs docs/examples/fixture-pack --desktop
 ```
 
-预期结果：`RESULT PASS`，外加一条 `WARN catalog.json 里没有 fixture-pack 的条目`
+预期结果：`RESULT PASS`（42 passed · 0 failed · 1 warning），外加一条 `WARN catalog.json 里没有 fixture-pack 的条目`
 （示例不登记收录表，WARN 不影响退出码）。它不是 `packs/` 下的目录，所以默认的
 `node tools/check-pack.mjs`（校验 `packs/`）不会扫描到它。
 

@@ -29,9 +29,11 @@ fixture 要复刻 dsh-mobile 的外壳骨架，并包含被断言能力需要的
 
 - 必须有 `.dshm-shell`、`.dshm-main`、`.dshm-mainContent`，且 `[data-slot="main"]` 下**恰好一个**面板根。
 - 面板内必须有可测控件：`button` / `[role="button"]` / `select` / `input` / `textarea`；声明 `hit-target` 时至少一个按钮 + 一个输入类控件。
+- 声明 `hit-target` 时：文本输入（非 checkbox/radio/button 等类型的 `input` 与 `textarea`）的 computed `font-size` 必须 ≥ 16px（`runtime.mobile.inputFontSize`）。宿主对文本输入设 16px，fixture 应体现宿主口径（例如 `font-size:16px`），否则断言会 FAIL；页面没有文本输入时该断言 SKIP 而不是 FAIL。
 - 声明 `shell-hit-target` 时：需要 `.dshm-panelNav` 内的按钮，以及 `.dshm-drawer[data-open="true"] [data-slot="sidebar"]` 内的按钮（check-pack 会展开抽屉做第二次测量）。
 - 声明 `floater-clearance` 时：需要 `[data-fixture="floater"]` 的 fixed、贴右下角元素。
 - 基线应保持“未适配”：`hit-target` 控件 < 44px、面板左缘 0、外壳按钮 < 44px。`runtime.mobile.applied` 会拒绝“什么都没改变”的 pack；`runtime.optOut` 会拒绝“opt-out 后数值没有回落”的 pack。
+- **定向 fixture 的溢出断言无条件运行**：`runtime.mobile.panel.right` 与 `runtime.mobile.overflow` 在 custom fixture 下不看 `width-reclaim` 是否声明（44px 的 `min-width` 等规则同样可能撑破 334px 面板）；内置 fixture 维持原 `capabilities` 门控。
 - **opt-out 由 check-pack 应用**：opt-out 轮会给 `<html>` 与面板根加 `data-dsh-adapt="off"`，fixture 不需要（也不应该）自己写这个属性。
 
 ## 3. `target` / markers / evidence
@@ -46,7 +48,7 @@ fixture 要复刻 dsh-mobile 的外壳骨架，并包含被断言能力需要的
 
 ```bash
 node tools/check-pack.mjs docs/examples/fixture-pack --desktop
-# RESULT PASS（43 passed · 0 failed · 1 warning：catalog 里没有这个示例条目，WARN 不失败）
+# RESULT PASS（42 passed · 0 failed · 1 warning：catalog 里没有这个示例条目，WARN 不失败）
 ```
 
 把它的 `fixture.html` 临时移走再跑：报告会打印“回退内置 fixture”，浮动控件相关断言会失败——说明缺了定向 fixture 不会伪装通过。把 `<svg onload=…>`、`srcset="data:…"`、`action=`、`poster="//…"` 或 `<script>` 塞进 fixture：静态层直接 FAIL，且浏览器解析与运行时层被跳过（不会执行这些内容）。
