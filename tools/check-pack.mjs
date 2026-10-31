@@ -30,8 +30,13 @@
  * The tool never edits the pack, never touches the network and never writes to
  * $DSH_HOME. What it cannot prove stays with a device: thumb accuracy, the real
  * env(safe-area-inset-*), momentum scrolling and the soft keyboard.
+ *
+ * Platforms: Linux, macOS and Windows. Windows checkouts with CRLF line endings
+ * and case-insensitive paths are supported; paths in the report are shown with
+ * forward slashes and existing pack directories are canonicalised to their
+ * on-disk case, so `PACKS\CORE-PANEL` and `packs/core-panel` are the same pack.
  */
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync, realpathSync, statSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { homedir } from 'node:os'
 import path from 'node:path'
@@ -40,6 +45,53 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const REPO = path.resolve(HERE, '..')
 const PACKS_DIR = path.join(REPO, 'packs')
+const WINDOWS = process.platform === 'win32'
+const DEFAULT_DSH_HOME = path.join(homedir(), '.dsh')
+
+/** Expand a leading `~` / `~/…` before resolving a user-supplied path. */
+function expandHome(value) {
+  const trimmed = String(value).trim()
+  if (trimmed === '~') return homedir()
+  return /^~[\\/]/.test(trimmed) ? path.join(homedir(), trimmed.slice(2)) : trimmed
+}
+
+/** `$DSH_HOME` with the same semantics as install.mjs: trim, expand `~`, resolve. */
+function resolveDshHome() {
+  const configured = process.env.DSH_HOME
+  if (configured === undefined || configured.trim() === '') return DEFAULT_DSH_HOME
+  return path.resolve(expandHome(configured))
+}
+
+/** Canonical on-disk case for paths that exist (Windows filesystems ignore case). */
+function onDiskPath(target) {
+  try {
+    return realpathSync.native(target)
+  } catch {
+    return target
+  }
+}
+
+function foldPath(target) {
+  const resolved = path.resolve(target)
+  return WINDOWS ? resolved.toLowerCase() : resolved
+}
+
+function samePath(left, right) {
+  return foldPath(left) === foldPath(right)
+}
+
+function isInsideDirectory(parent, child) {
+  const foldedParent = foldPath(parent)
+  const foldedChild = foldPath(child)
+  return foldedChild === foldedParent || foldedChild.startsWith(foldedParent.endsWith(path.sep) ? foldedParent : foldedParent + path.sep)
+}
+
+/** Report paths with forward slashes so --json and docs are identical across OSes. */
+function displayPath(target) {
+  return String(target).split(path.sep).join('/')
+}
+
+const PACKS_DIR_REAL = onDiskPath(PACKS_DIR)
 
 const MOBILE_VIEWPORT = Object.freeze({ width: 390, height: 844 })
 const DESKTOP_VIEWPORT = Object.freeze({ width: 1280, height: 800 })
@@ -78,13 +130,13 @@ if (packArgs.length === 0) {
 
 const packPaths = []
 for (const argument of packArgs) {
-  const resolved = path.resolve(process.cwd(), argument)
-  if (resolved === PACKS_DIR) packPaths.push(...listPackDirectories())
+  const resolved = onDiskPath(path.resolve(process.cwd(), argument))
+  if (samePath(resolved, PACKS_DIR_REAL)) packPaths.push(...listPackDirectories())
   else packPaths.push(resolved)
 }
 const selected = []
 for (const packPath of packPaths) {
-  if (packPath.startsWith(PACKS_DIR + path.sep) === false && packPath !== PACKS_DIR) {
+  if (isInsideDirectory(PACKS_DIR_REAL, packPath) === false) {
     selected.push({ path: packPath, skip: null, id: path.basename(packPath) })
     continue
   }
@@ -111,7 +163,7 @@ class PackReport {
   constructor(id, directory) {
     this.id = id
     this.directory = directory
-    this.relative = path.relative(process.cwd(), directory) || directory
+    this.relative = displayPath(path.relative(process.cwd(), directory)) || displayPath(directory)
     this.ok = true
     this.assertions = []
     this.measurements = {}
@@ -1177,13 +1229,47 @@ function summarizeControls(controls) {
 
 // ---------------------------------------------------------------- Playwright
 
+/**
+ * Playwright is a CommonJS package: `import('…/index.js')` gives a namespace whose
+ * `chromium` may live on `default` (Windows/macOS included), while `createRequire`
+ * returns the package object directly. Normalise both shapes.
+ */
+function unwrapPlaywright(moduleValue) {
+  if (moduleValue !== null && typeof moduleValue === 'object' && moduleValue.chromium !== undefined) return moduleValue
+  const fallback = moduleValue?.default
+  if (fallback !== null && typeof fallback === 'object' && fallback.chromium !== undefined) return fallback
+  throw new Error('模块没有导出 chromium')
+}
+
+/**
+ * Resolution order: `DSH_PLAYWRIGHT` (index.js or package directory) →
+ * `$DSH_HOME/profiles/{web,desktop,headless}/node_modules` → this repo → module
+ * resolution. The failure lists every path tried so a Windows user can see which
+ * `DSH_HOME` was used and what to install.
+ */
 async function loadPlaywright() {
-  if (process.env.DSH_PLAYWRIGHT !== undefined && process.env.DSH_PLAYWRIGHT !== '') {
-    return await import(pathToFileURL(process.env.DSH_PLAYWRIGHT).href)
+  const tried = []
+  const configured = process.env.DSH_PLAYWRIGHT?.trim()
+  if (configured !== undefined && configured !== '') {
+    const target = onDiskPath(path.resolve(expandHome(configured)))
+    tried.push(`DSH_PLAYWRIGHT=${target}`)
+    try {
+      if (existsSync(target) === true && statSync(target).isDirectory() === true) {
+        return unwrapPlaywright(createRequire(path.join(target, 'package.json'))(target))
+      }
+      return unwrapPlaywright(await import(pathToFileURL(target).href))
+    } catch (error) {
+      throw new Error([
+        `DSH_PLAYWRIGHT 指向的 Playwright 无法加载：${target}`,
+        error instanceof Error ? error.message : String(error),
+        '它可以指向 playwright 的 index.js，也可以指向 playwright 包目录。',
+      ].join('\n'))
+    }
   }
-  const home = process.env.DSH_HOME ?? path.join(homedir(), '.dsh')
+  const home = resolveDshHome()
   for (const profile of ['web', 'desktop', 'headless']) {
     const anchor = path.join(home, 'profiles', profile, 'package.json')
+    tried.push(anchor)
     if (existsSync(anchor) === false) continue
     try {
       return createRequire(anchor)('playwright')
@@ -1191,12 +1277,40 @@ async function loadPlaywright() {
       // next profile
     }
   }
+  const repoAnchor = path.join(REPO, 'package.json')
+  tried.push(repoAnchor)
   try {
-    const anchor = path.join(REPO, 'package.json')
-    return createRequire(anchor)('playwright')
+    return createRequire(repoAnchor)('playwright')
   } catch {
-    return await import('playwright')
+    // fall through to module resolution
   }
+  try {
+    return await import('playwright')
+  } catch {
+    // report everything below
+  }
+  throw new Error([
+    'Playwright 未找到：check-pack 需要 Playwright + Chromium 做夹具测量。',
+    `DSH_HOME：${home}`,
+    '已尝试：',
+    ...tried.map(item => `  - ${item}`),
+    '安装（在仓库根目录）：',
+    '  npm install --no-save --no-package-lock playwright',
+    '  npx playwright install chromium',
+    WINDOWS ? 'Windows 的浏览器默认下载到 %LOCALAPPDATA%\\ms-playwright。' : 'Linux 的浏览器默认下载到 ~/.cache/ms-playwright。',
+    '也可以用 DSH_PLAYWRIGHT 指向已有的 playwright（index.js 或包目录）。',
+  ].join('\n'))
+}
+
+function describeChromiumLaunchFailure(error) {
+  const message = error instanceof Error ? error.message : String(error)
+  const browsersPath = process.env.PLAYWRIGHT_BROWSERS_PATH?.trim() || (WINDOWS ? '%LOCALAPPDATA%\\ms-playwright' : '~/.cache/ms-playwright')
+  return [
+    `Chromium 无法启动：${message}`,
+    `Playwright 浏览器缓存：${browsersPath}`,
+    '请在仓库根目录执行：npx playwright install chromium',
+    '离线环境可把 PLAYWRIGHT_BROWSERS_PATH 指向已有的浏览器目录；DSH 自带的 Playwright 通常也自带浏览器。',
+  ].join('\n')
 }
 
 // ---------------------------------------------------------------- driver
@@ -1336,9 +1450,13 @@ async function main() {
   let fatal = null
   try {
     const { chromium } = await loadPlaywright()
-    browser = await chromium.launch({
-      args: ['--disable-background-networking', '--disable-component-update', '--no-first-run'],
-    })
+    try {
+      browser = await chromium.launch({
+        args: ['--disable-background-networking', '--disable-component-update', '--no-first-run'],
+      })
+    } catch (error) {
+      throw new Error(describeChromiumLaunchFailure(error))
+    }
     for (const selection of selected) {
       const report = await checkPack(browser, selection, selection.skip, flags)
       reports.push(report)
@@ -1354,7 +1472,7 @@ async function main() {
       process.stdout.write(`${JSON.stringify({ tool: 'check-pack', version: 1, ok: false, error: fatal, packs: reports.map(serialize) }, null, 2)}\n`)
     } else {
       console.error(`check-pack 无法运行：${fatal}`)
-      console.error('需要 Playwright（npm install playwright）+ Chromium；本机可把 DSH_PLAYWRIGHT 指到已安装的 playwright。')
+      console.error('需要 Playwright + Chromium；详见 README 的「Windows」/「Install」段落，或用 DSH_PLAYWRIGHT 指向已安装的 playwright。')
     }
     process.exit(1)
   }
