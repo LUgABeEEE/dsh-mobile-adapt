@@ -7,5 +7,23 @@
   "license": "MIT",
   "scripts": {
     "check": "node tools/check-pack.mjs"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/LUgABeEEE/dsh-mobile-adapt.git"
+  },
+  "bugs": {
+    "url": "https://github.com/LUgABeEEE/dsh-mobile-adapt/issues"
+  },
+  "homepage": "https://github.com/LUgABeEEE/dsh-mobile-adapt#readme",
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "dsh-mobile",
+    "mobile-ui",
+    "accessibility",
+    "touch-targets",
+    "css"
+  ],
+  "author": "LUgABeEEE"
 }
