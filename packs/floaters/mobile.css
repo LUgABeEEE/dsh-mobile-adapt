@@ -1,0 +1,33 @@
+/* floaters — 让插件面板的内容躲开右下角的浮动控件
+ *
+ * 问题：外壳层面会出现固定在右下角的悬浮组件（计费气泡、小助手入口之类）。它们
+ * `position: fixed` + 高 z-index，压在插件面板的最后几行上；面板通常自己滚动，
+ * 滚到底也还是被盖住 —— 用户看不到最后一条，也点不到它。
+ *
+ * 做法：不去移动任何别人的控件（那要按第三方类名写选择器，也被收录标准禁止），
+ * 而是给面板**留出那块空间**：`mobile.js` 量出底部这些固定控件占的高度，写进
+ * `--dshm-floaters`；这里把它变成面板根的 margin-bottom，让外层滚动容器多出一段
+ * 可滚距离。于是列表本身的视口高度不变（不会因为留白而变小），只是"能再往下滚一点"。
+ *
+ * 为什么是 margin 而不是 padding：padding 会缩小面板自身的内容盒，列表一下少看
+ * 一百多像素（真机实测 273px → 153px）；margin 是往外要空间，由 `.dshm-mainContent`
+ * 的滚动吸收，面板尺寸不变。
+ *
+ * 只在真的测到浮动控件时才生效（`data-dsh-floaters="1"`），没有悬浮组件的页面上
+ * 这两条规则完全不命中。
+ */
+
+@media (pointer: coarse) {
+  /* 1. 面板状态下外层要能滚，才能把最后一行滚到浮动控件上方。
+   *    面板自己已经在滚动时这条不改变行为（只是把外层也变成滚动容器）。 */
+  :root:not([data-dsh-adapt="off"])[data-dsh-floaters="1"] .dshm-mainContent {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* 2. 让位本身：留出浮动控件的高度，滚到底时最后一行停在控件上方。 */
+  :root:not([data-dsh-adapt="off"])[data-dsh-floaters="1"] [data-slot="main"] > * {
+    margin-bottom: var(--dshm-floaters, 0px);
+  }
+}

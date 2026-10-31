@@ -1,0 +1,65 @@
+/* core-panel · 第三方插件面板的手机下限
+ *
+ * 只做三件插件面板自己保证不了的事（不点名任何插件、不重绘视觉）：
+ *   1. 粗指针下插件面板内的命中下限（44px）；
+ *   2. ≤720px 上面板让开折叠的 56px 图标轨道（加在 .dshm-mainContent 的
+ *      padding-left 上，不是插件根 margin——`width:100%` 的插件根加 margin
+ *      会变成 100%+56，右边被 overflow:hidden 裁掉）；
+ *   3. 面板页底部让出 env(safe-area-inset-bottom)。
+ *
+ * 面板状态只认 [data-dsh-panel="1"]：由 mobile.js 用 MutationObserver + rAF
+ * 写在外壳 .dshm-main 上，不依赖 :has()（部分 WebView 没有这个选择器）。
+ * opt-out 也在 mobile.js 里处理：主槽子树或外壳祖先带 [data-dsh-adapt="off"] 时
+ * shim 写 data-dsh-panel="0"，下面所有规则自然不命中。
+ *
+ * 数值用 !important：这是宿主下限，不是建议值（与 dsh-mobile 自己对输入框
+ * 字号用 !important 的理由相同）。代价见 README「代价与边界」。
+ */
+
+/* 1. 命中下限。只作用于主槽（[data-slot="main"]）内的控件，宿主外壳自己的
+ *    返回栏/抽屉不在范围内——那是 dsh-mobile 自己的密度，不该被这张包改。 */
+@media (pointer: coarse) {
+  .dshm-main[data-dsh-panel="1"] [data-slot="main"] :where(button, [role="button"], select) {
+    min-height: 44px !important;
+  }
+
+  /* svg-only 图标按钮没有文字撑宽，只加高度仍是 28px 宽：宽度也要兜住。
+   * 开关/勾选例外：它们靠视觉表达状态，撑成 44×44 会变成大方块压在行上。 */
+  .dshm-main[data-dsh-panel="1"] [data-slot="main"] :where(button, [role="button"]):not([role="switch"]):not([role="checkbox"]) {
+    min-width: 44px !important;
+  }
+
+  /* 开关/勾选：视觉复位。只撤掉本包加上的下限，视觉盒保持插件
+   * 自己的尺寸；命中区交给控件自己的 label / 外层可点区域。这是「宿主下限」
+   * 的一次显式例外——不用伪元素硬扩，是为了不覆盖开关自己的 ::before/::after
+   * （轨道/旋钮）。 */
+  .dshm-main[data-dsh-panel="1"] [data-slot="main"] :is([role="switch"], [role="checkbox"]) {
+    min-height: 0 !important;
+    min-width: 0 !important;
+  }
+
+  .dshm-main[data-dsh-panel="1"] [data-slot="main"] :where(input:not([type="checkbox"]):not([type="radio"]), textarea) {
+    min-height: 44px !important;
+  }
+
+  /* 去掉 300ms 双击缩放等待，让 44px 的控件按手指预期响应。 */
+  .dshm-main[data-dsh-panel="1"] [data-slot="main"] :where(button, [role="button"], a) {
+    touch-action: manipulation;
+  }
+}
+
+/* 2 + 3. 窄屏让位与底部安全区。让位量由 mobile.js 实测折叠轨道宽度后写成
+ *    --dshm-rail（0–64px；轨道不可见或抽屉展开时为 0），默认 56px。 */
+@media (max-width: 720px) {
+  .dshm-main[data-dsh-panel="1"] .dshm-mainContent {
+    padding-left: var(--dshm-rail, 56px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  /* 让位后插件根不能比剩余宽度更宽：`width:100vw` / 固定像素宽的根都收回来。
+   * 只作用于主槽根节点，不动后代——插件内部的宽表仍可按自己的规则滚动。 */
+  .dshm-main[data-dsh-panel="1"] [data-slot="main"] > * {
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+}

@@ -1,0 +1,1404 @@
+#!/usr/bin/env node
+/**
+ * check-pack.mjs — one adaptation pack, three layers, no device.
+ *
+ *   node tools/check-pack.mjs packs/<id> [packs/<id> ...] [--json] [--desktop]
+ *   node tools/check-pack.mjs                     # every pack under packs/
+ *
+ * Layers:
+ *   1. static  — extension.json carries exactly the five runtime fields and its
+ *                id equals the directory name; every selector in mobile.css is
+ *                scoped to `[data-dsh-panel="1"]`, `(pointer: coarse)` or
+ *                `[data-dsh-adapt="off"]`, and names no third-party plugin; the
+ *                mobile.js script calls `window.dshMobile.define` with the same
+ *                id and apiVersion 1.
+ *   2. runtime — a fixture that reproduces the phone shell's DOM, wrapped around
+ *                a deliberately desktop-first panel (28px buttons, 32px inputs,
+ *                a full-width root). At 390×844 with a coarse pointer the pack's
+ *                mobile.css then mobile.js run; the panel must reach a 44px hit
+ *                floor and clear the 56px rail without overflowing 390px.
+ *   3. desktop — the same fixture at 1280×800 with a fine pointer. The three
+ *                rules must move nothing: every measured value equals the
+ *                no-pack baseline. `--desktop` adds strict parity of the
+ *                computed box of `.dshm-mainContent` and every control rect.
+ *   opt-out     — the panel root carries `data-dsh-adapt="off"`; all measured
+ *                values must fall back to the no-pack baseline.
+ *
+ * `--json` prints one machine-readable object instead of the tables. Any failed
+ * assertion exits 1; usage errors exit 2.
+ *
+ * The tool never edits the pack, never touches the network and never writes to
+ * $DSH_HOME. What it cannot prove stays with a device: thumb accuracy, the real
+ * env(safe-area-inset-*), momentum scrolling and the soft keyboard.
+ */
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
+import { createRequire } from 'node:module'
+import { homedir } from 'node:os'
+import path from 'node:path'
+import { fileURLToPath, pathToFileURL } from 'node:url'
+
+const HERE = path.dirname(fileURLToPath(import.meta.url))
+const REPO = path.resolve(HERE, '..')
+const PACKS_DIR = path.join(REPO, 'packs')
+
+const MOBILE_VIEWPORT = Object.freeze({ width: 390, height: 844 })
+const DESKTOP_VIEWPORT = Object.freeze({ width: 1280, height: 800 })
+const HIT_TARGET = 44
+const RAIL_WIDTH = 56
+const EPSILON = 0.5
+
+const PACK_ID_RE = /^[a-z][a-z0-9-]{0,63}$/
+const MANIFEST_FIELDS = Object.freeze(['description', 'id', 'name', 'schemaVersion', 'version'])
+const CSS_LIMIT = 512 * 1024
+const JS_LIMIT = 1024 * 1024
+const MANIFEST_LIMIT = 64 * 1024
+
+const ROOT = { 'data-slot': true, role: true }
+
+// ---------------------------------------------------------------- CLI
+
+const argv = process.argv.slice(2)
+const flags = { json: false, desktop: false }
+const packArgs = []
+for (const value of argv) {
+  if (value === '--json') flags.json = true
+  else if (value === '--desktop') flags.desktop = true
+  else if (value === '--help' || value === '-h') {
+    console.log(usage())
+    process.exit(0)
+  } else if (value.startsWith('--')) {
+    console.error(`未知参数：${value}\n\n${usage()}`)
+    process.exit(2)
+  } else packArgs.push(value)
+}
+
+if (packArgs.length === 0) {
+  packArgs.push(...listPackDirectories())
+}
+
+const packPaths = []
+for (const argument of packArgs) {
+  const resolved = path.resolve(process.cwd(), argument)
+  if (resolved === PACKS_DIR) packPaths.push(...listPackDirectories())
+  else packPaths.push(resolved)
+}
+const selected = []
+for (const packPath of packPaths) {
+  if (packPath.startsWith(PACKS_DIR + path.sep) === false && packPath !== PACKS_DIR) {
+    selected.push({ path: packPath, skip: null, id: path.basename(packPath) })
+    continue
+  }
+  const name = path.basename(packPath)
+  if (name.startsWith('_')) {
+    selected.push({ path: packPath, skip: `目录名以下划线开头（${name}）：不参与校验`, id: name })
+    continue
+  }
+  selected.push({ path: packPath, skip: null, id: name })
+}
+
+if (selected.length === 0) {
+  if (flags.json === true) {
+    process.stdout.write(`${JSON.stringify({ tool: 'check-pack', version: 1, ok: true, packs: [] }, null, 2)}\n`)
+  } else {
+    console.log('packs/ 下没有可校验的包（_template 已跳过）')
+  }
+  process.exit(0)
+}
+
+// ---------------------------------------------------------------- report
+
+class PackReport {
+  constructor(id, directory) {
+    this.id = id
+    this.directory = directory
+    this.relative = path.relative(process.cwd(), directory) || directory
+    this.ok = true
+    this.assertions = []
+    this.measurements = {}
+    this.error = null
+  }
+
+  record(layer, assertion, status, message, detail) {
+    const entry = { layer, id: assertion, status, message }
+    if (detail !== undefined) entry.detail = detail
+    this.assertions.push(entry)
+    if (status === 'failed') this.ok = false
+    return status === 'passed'
+  }
+
+  pass(layer, id, message, detail) { return this.record(layer, id, 'passed', message, detail) }
+  warn(layer, id, message, detail) { return this.record(layer, id, 'warning', message, detail) }
+  skip(layer, id, message, detail) { return this.record(layer, id, 'skipped', message, detail) }
+  fail(layer, id, message, detail) { return this.record(layer, id, 'failed', message, detail) }
+
+  counts() {
+    const counts = { passed: 0, failed: 0, skipped: 0, warning: 0 }
+    for (const entry of this.assertions) counts[entry.status] += 1
+    return counts
+  }
+}
+
+// ---------------------------------------------------------------- static layer
+
+function inspectStatic(report) {
+  const dir = report.directory
+  if (existsSync(dir) === false || statSync(dir).isDirectory() === false) {
+    report.fail('static', 'static.directory', `包目录不存在：${dir}`)
+    return { css: null, js: null }
+  }
+  report.pass('static', 'static.directory', '包目录存在')
+
+  inspectManifest(report)
+  const css = inspectCss(report)
+  const js = inspectJs(report, path.basename(report.directory))
+  inspectCatalog(report)
+  return { css, js }
+}
+
+function inspectManifest(report) {
+  const file = path.join(report.directory, 'extension.json')
+  if (existsSync(file) === false) {
+    report.fail('static', 'static.manifest.present', '缺少 extension.json')
+    return null
+  }
+  const bytes = readFileSync(file)
+  if (bytes.byteLength > MANIFEST_LIMIT) {
+    report.fail('static', 'static.manifest.size', `extension.json 超过 64 KB（${bytes.byteLength} 字节）`)
+  } else {
+    report.pass('static', 'static.manifest.size', `extension.json ${bytes.byteLength} 字节（≤ 64 KB）`)
+  }
+
+  let value
+  try {
+    value = JSON.parse(bytes.toString('utf8'))
+  } catch (error) {
+    report.fail('static', 'static.manifest.json', `extension.json 不是合法 JSON：${error.message}`)
+    return null
+  }
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    report.fail('static', 'static.manifest.json', 'extension.json 顶层必须是对象')
+    return null
+  }
+  report.pass('static', 'static.manifest.json', 'extension.json 可解析为对象')
+
+  const keys = Object.keys(value).sort()
+  const expected = [...MANIFEST_FIELDS].sort()
+  const missing = expected.filter(key => keys.includes(key) === false)
+  const extra = keys.filter(key => expected.includes(key) === false)
+  if (missing.length === 0 && extra.length === 0) {
+    report.pass('static', 'static.manifest.fields', '字段集合恰为 schemaVersion/id/name/version/description', { fields: keys })
+  } else {
+    const parts = []
+    if (missing.length > 0) parts.push(`缺少 ${missing.join(', ')}`)
+    if (extra.length > 0) parts.push(`多出 ${extra.join(', ')}`)
+    report.fail('static', 'static.manifest.fields', `字段集合不是恰好 5 个：${parts.join('；')}（运行时整包拒绝）`, { fields: keys })
+  }
+
+  if (value.schemaVersion === 1) {
+    report.pass('static', 'static.manifest.schemaVersion', 'schemaVersion === 1')
+  } else {
+    report.fail('static', 'static.manifest.schemaVersion', `schemaVersion 必须为 1，实际 ${JSON.stringify(value.schemaVersion)}`)
+  }
+
+  const directoryName = path.basename(report.directory)
+  const validId = typeof value.id === 'string' && PACK_ID_RE.test(value.id)
+  if (typeof value.id === 'string' && value.id === directoryName && validId) {
+    report.pass('static', 'static.manifest.id', `id === 目录名（${value.id}）且匹配 ${PACK_ID_RE}`)
+  } else if (typeof value.id === 'string' && value.id !== directoryName) {
+    report.fail('static', 'static.manifest.id', `id（${value.id}）必须等于目录名（${directoryName}）`)
+  } else {
+    report.fail('static', 'static.manifest.id', `id 必须是匹配 ${PACK_ID_RE} 的小写标识，实际 ${JSON.stringify(value.id)}`)
+  }
+
+  for (const field of ['name', 'version', 'description']) {
+    const fieldValue = value[field]
+    if (typeof fieldValue === 'string' && fieldValue.trim() !== '') {
+      report.pass('static', `static.manifest.${field}`, `${field} 是非空字符串`)
+    } else {
+      report.fail('static', `static.manifest.${field}`, `${field} 必须是非空字符串（收录要求有描述）`)
+    }
+  }
+  return value
+}
+
+function inspectCss(report) {
+  const file = path.join(report.directory, 'mobile.css')
+  if (existsSync(file) === false) {
+    report.skip('static', 'static.css.present', '没有 mobile.css（纯 JS 包）')
+    return null
+  }
+  const bytes = readFileSync(file)
+  if (bytes.byteLength > CSS_LIMIT) {
+    report.fail('static', 'static.css.size', `mobile.css 超过 512 KB（${bytes.byteLength} 字节）`)
+  } else {
+    report.pass('static', 'static.css.size', `mobile.css ${bytes.byteLength} 字节（≤ 512 KB）`)
+  }
+  const source = bytes.toString('utf8')
+  const rules = parseStylesheet(source)
+  let selectorCount = 0
+  let scopeFailures = 0
+  let markerFailures = 0
+  let hashFailures = 0
+
+  for (const rule of rules) {
+    if (rule.kind === 'statement') {
+      if (/^@import\b/i.test(rule.prelude)) {
+        report.fail('static', 'static.css.import', `第 ${rule.line} 行出现 @import：包不得引入外部样式（不联网）`)
+      }
+      continue
+    }
+    if (rule.kind === 'at-block') {
+      report.fail('static', 'static.css.at-rule', `第 ${rule.line} 行出现未支持的 at-rule：${rule.prelude.slice(0, 80)}`)
+      continue
+    }
+    for (const rawSelector of splitSelectors(rule.selector)) {
+      const selector = rawSelector.trim()
+      if (selector === '') continue
+      selectorCount += 1
+      if (/:has\s*\(/i.test(selector)) {
+        hashFailures += 1
+        report.fail('static', 'static.css.has', `第 ${rule.line} 行用了 :has()：兼容没有 :has 的 WebView，状态请用 data 属性`)
+      }
+      const markers = thirdPartyMarkers(selector)
+      if (markers.length > 0) {
+        markerFailures += 1
+        report.fail('static', 'static.css.third-party', `第 ${rule.line} 行出现第三方插件标记 ${markers.join(' / ')}：只允许 .dshm-*、[data-slot]、[role] 与 data-dsh* 自写契约`, { selector })
+      }
+      const scope = selectorScope(rule, selector)
+      if (scope === null) {
+        scopeFailures += 1
+        report.fail('static', 'static.css.scope', `第 ${rule.line} 行选择器不在 [data-dsh-panel="1"] / (pointer: coarse) / [data-dsh-adapt="off"] 作用域内：${selector}`, { selector })
+      }
+    }
+  }
+
+  if (scopeFailures === 0) {
+    report.pass('static', 'static.css.scope', `全部 ${selectorCount} 条选择器都落在允许的作用域内`)
+  }
+  if (markerFailures === 0) {
+    report.pass('static', 'static.css.third-party', '没有第三方插件类名 / id（只用外壳标记）')
+  }
+  if (hashFailures === 0) {
+    report.pass('static', 'static.css.has', '没有使用 :has()')
+  }
+  return source
+}
+
+function inspectJs(report, directoryId) {
+  const file = path.join(report.directory, 'mobile.js')
+  if (existsSync(file) === false) {
+    report.skip('static', 'static.js.present', '没有 mobile.js（纯 CSS 包）')
+    return null
+  }
+  const bytes = readFileSync(file)
+  if (bytes.byteLength > JS_LIMIT) {
+    report.fail('static', 'static.js.size', `mobile.js 超过 1 MB（${bytes.byteLength} 字节）`)
+  } else {
+    report.pass('static', 'static.js.size', `mobile.js ${bytes.byteLength} 字节（≤ 1 MB）`)
+  }
+  const source = bytes.toString('utf8')
+
+  const defineMatch = source.match(/dshMobile\s*(?:\?\.)?\.?\s*define\s*\(/)
+  if (defineMatch === null) {
+    report.fail('static', 'static.js.define', 'mobile.js 没有调用 window.dshMobile.define(...)')
+    return { source, id: null }
+  }
+  report.pass('static', 'static.js.define', 'mobile.js 调用了 window.dshMobile.define(...)')
+
+  const tail = source.slice(defineMatch.index + defineMatch[0].length)
+  const objectOpen = tail.indexOf('{')
+  if (objectOpen === -1) {
+    report.fail('static', 'static.js.definition', 'define 的参数不是对象字面量，无法静态核对 id / apiVersion / activate')
+    return { source, id: null }
+  }
+  const objectClose = findBlockEnd(tail, objectOpen, tail.length)
+  const objectBody = tail.slice(objectOpen + 1, objectClose)
+  const fields = topLevelFields(objectBody)
+
+  const idRaw = fields.get('id')
+  let staticId = null
+  const idLiteral = idRaw === undefined ? null : idRaw.trim().match(/^(['"`])([^'"`]+)\1$/)
+  if (idLiteral === null) {
+    report.fail('static', 'static.js.id', "mobile.js 的 define 缺少字面量 id（需要 id: '<目录名>'，便于静态核对）")
+  } else {
+    staticId = idLiteral[2]
+    if (staticId === directoryId) {
+      report.pass('static', 'static.js.id', `define 的 id 与目录名一致（${staticId}）`)
+    } else {
+      report.fail('static', 'static.js.id', `define 的 id（${staticId}）必须等于目录名（${directoryId}）`)
+    }
+  }
+
+  if (fields.get('apiVersion')?.trim() === '1') {
+    report.pass('static', 'static.js.apiVersion', 'apiVersion === 1')
+  } else {
+    report.fail('static', 'static.js.apiVersion', 'define 缺少 apiVersion: 1（运行时不会激活）')
+  }
+
+  if (fields.has('activate') || /(^|[,{\s])activate\s*\(/.test(objectBody)) {
+    report.pass('static', 'static.js.activate', 'define 提供了 activate')
+  } else {
+    report.fail('static', 'static.js.activate', 'define 缺少 activate 函数')
+  }
+  return { source, id: staticId }
+}
+
+/**
+ * Split the body of an object literal into `key -> raw value` at nesting depth 0.
+ * Methods (`activate(api) {...}`) are not colon properties; callers detect those
+ * separately.
+ */
+function topLevelFields(body) {
+  const fields = new Map()
+  let depth = 0
+  let quote = null
+  let start = 0
+  const consume = end => {
+    const segment = body.slice(start, end)
+    const match = segment.match(/^\s*(?:["'`])?([\w$]+)(?:["'`])?\s*:\s*([\s\S]*?)\s*$/)
+    if (match !== null) fields.set(match[1], match[2])
+    start = end + 1
+  }
+  for (let index = 0; index < body.length; index += 1) {
+    const character = body[index]
+    if (quote !== null) {
+      if (character === '\\') index += 1
+      else if (character === quote) quote = null
+      continue
+    }
+    if (character === '"' || character === "'" || character === '`') { quote = character; continue }
+    if (character === '{' || character === '(' || character === '[') depth += 1
+    else if (character === '}' || character === ')' || character === ']') depth -= 1
+    else if (character === ',' && depth === 0) consume(index)
+  }
+  consume(body.length)
+  return fields
+}
+
+function inspectCatalog(report) {
+  const file = path.join(REPO, 'catalog.json')
+  if (existsSync(file) === false) return
+  let catalog
+  try {
+    catalog = JSON.parse(readFileSync(file, 'utf8'))
+  } catch {
+    report.warn('static', 'static.catalog', 'catalog.json 不是合法 JSON，无法核对登记一致性')
+    return
+  }
+  const entries = Array.isArray(catalog?.packs) ? catalog.packs : []
+  const entry = entries.find(item => item?.id === report.id)
+  if (entry === undefined) {
+    report.warn('static', 'static.catalog', `catalog.json 里没有 ${report.id} 的条目（收录时必须同时提交目录与条目）`)
+  } else {
+    report.pass('static', 'static.catalog', `catalog.json 已登记 ${report.id}（status=${entry.status ?? '?'}、risk=${entry.risk ?? '?'}、default=${entry.default ?? '?'}）`)
+    if (Array.isArray(entry.capabilities)) {
+      report.capabilities = new Set(entry.capabilities.map(name => String(name)))
+    }
+    if (Array.isArray(entry.usesHostMarkers)) report.declaredMarkers = entry.usesHostMarkers.map(String)
+  }
+}
+
+/** Whether an assertion group should run: a declared capability, or everything
+ *  when the catalog has no entry yet (an unreviewed pack still gets checked). */
+function covers(report, capability) {
+  if (report.capabilities === undefined) return true
+  return report.capabilities.has(capability)
+}
+
+// ---------------------------------------------------------------- CSS parsing
+
+const DESCEND_AT = new Set(['media', 'supports', 'layer', 'container', 'scope'])
+const OPAQUE_AT = new Set(['keyframes', '-webkit-keyframes', 'font-face', 'property', 'page', 'counter-style', 'font-feature-values'])
+
+/** Remove comments but keep every newline so reported line numbers stay true. */
+function stripComments(css) {
+  return css.replace(/\/\*[\s\S]*?\*\//g, match => match.replace(/[^\n]/g, ' '))
+}
+
+function lineAt(source, index) {
+  let line = 1
+  for (let cursor = 0; cursor < index; cursor += 1) if (source[cursor] === '\n') line += 1
+  return line
+}
+
+function findBlockEnd(source, open, end) {
+  let depth = 0
+  let quote = null
+  for (let index = open; index < end; index += 1) {
+    const character = source[index]
+    if (quote !== null) {
+      if (character === '\\') { index += 1; continue }
+      if (character === quote) quote = null
+      continue
+    }
+    if (character === '"' || character === "'") { quote = character; continue }
+    if (character === '{') depth += 1
+    else if (character === '}') {
+      depth -= 1
+      if (depth === 0) return index
+    }
+  }
+  return end - 1
+}
+
+/** The next top-level `{` or `;` after `from` (parens and strings respected). */
+function nextDelimiter(source, from, end) {
+  let quote = null
+  let parens = 0
+  for (let index = from; index < end; index += 1) {
+    const character = source[index]
+    if (quote !== null) {
+      if (character === '\\') { index += 1; continue }
+      if (character === quote) quote = null
+      continue
+    }
+    if (character === '"' || character === "'") { quote = character; continue }
+    if (character === '(') parens += 1
+    else if (character === ')') parens = Math.max(0, parens - 1)
+    else if (parens === 0 && (character === '{' || character === ';')) return { index, character }
+  }
+  return { index: end, character: null }
+}
+
+/**
+ * Walk a stylesheet into flat style rules. At-rules that only group rules are
+ * descended into and remembered in `stack`, so a selector can be judged against
+ * `@media (pointer: coarse)` and friends.
+ */
+function parseStylesheet(css) {
+  const source = stripComments(css)
+  const rules = []
+  const walk = (start, end, stack) => {
+    let index = start
+    while (index < end) {
+      while (index < end && /\s/.test(source[index])) index += 1
+      if (index >= end) break
+      const line = lineAt(source, index)
+      const delimiter = nextDelimiter(source, index, end)
+      if (delimiter.character === null) break
+      const prelude = source.slice(index, delimiter.index).trim()
+      if (delimiter.character === ';') {
+        rules.push({ kind: 'statement', prelude, line, stack })
+        index = delimiter.index + 1
+        continue
+      }
+      const open = delimiter.index
+      const close = findBlockEnd(source, open, end)
+      if (prelude.startsWith('@')) {
+        const name = (prelude.match(/^@([\w-]+)/) ?? [, ''])[1].toLowerCase()
+        if (DESCEND_AT.has(name)) walk(open + 1, close, stack.concat({ name, prelude, line }))
+        else if (OPAQUE_AT.has(name) === false) rules.push({ kind: 'at-block', prelude, line, stack })
+      } else if (prelude !== '') {
+        rules.push({ kind: 'style', selector: prelude, line, stack })
+      }
+      index = close + 1
+    }
+  }
+  walk(0, source.length, [])
+  return rules
+}
+
+function splitSelectors(selector) {
+  const parts = []
+  let depth = 0
+  let quote = null
+  let start = 0
+  for (let index = 0; index < selector.length; index += 1) {
+    const character = selector[index]
+    if (quote !== null) {
+      if (character === '\\') index += 1
+      else if (character === quote) quote = null
+      continue
+    }
+    if (character === '"' || character === "'") quote = character
+    else if (character === '(' || character === '[') depth += 1
+    else if (character === ')' || character === ']') depth = Math.max(0, depth - 1)
+    else if (character === ',' && depth === 0) {
+      parts.push(selector.slice(start, index))
+      start = index + 1
+    }
+  }
+  parts.push(selector.slice(start))
+  return parts
+}
+
+function selectorScope(rule, selector) {
+  if (/\[\s*data-dsh-panel\s*=\s*(?:"1"|'1'|1)\s*\]/.test(selector)) return 'panel'
+  if (/\[\s*data-dsh-adapt\s*=\s*(?:"off"|'off'|off)\s*\]/.test(selector)) return 'opt-out'
+  for (const at of rule.stack) {
+    if (at.name === 'media' && /\(\s*(?:any-)?pointer\s*:\s*coarse\s*\)/i.test(at.prelude)) return 'coarse'
+  }
+  return null
+}
+
+/**
+ * Class / id / data attribute selectors that would name something other than the
+ * shell. `.dshm-*`, `[data-slot]`, `[role]`, the pack's own `data-dsh*` contract
+ * and the shell's state attributes (`data-open`, `data-pane`) are the only
+ * allowed identities; a plugin's own class or test id must never be named.
+ */
+function thirdPartyMarkers(selector) {
+  const offenders = []
+  for (const match of selector.matchAll(/\.(-?[_a-zA-Z][\w-]*)/g)) {
+    if (match[1].startsWith('dshm-') === false) offenders.push(`.${match[1]}`)
+  }
+  for (const match of selector.matchAll(/#(-?[_a-zA-Z][\w-]*)/g)) {
+    offenders.push(`#${match[1]}`)
+  }
+  for (const match of selector.matchAll(/\[\s*([^\s\]=~|^$*]+)/g)) {
+    const name = match[1].toLowerCase()
+    if (name === 'class' || name === 'id' || name === 'style') {
+      offenders.push(`[${name}…]`)
+      continue
+    }
+    if (name.startsWith('data-') === false) continue
+    if (name === 'data-slot' || name === 'data-open' || name === 'data-pane' || name.startsWith('data-dsh')) continue
+    offenders.push(`[${name}]`)
+  }
+  return [...new Set(offenders)]
+}
+
+// ---------------------------------------------------------------- browser fixture
+
+const FIXTURE = (optOut) => `<!DOCTYPE html>
+<html lang="zh-CN"${optOut === true ? ' data-dsh-adapt="off"' : ''}><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>check-pack fixture</title>
+<script>window.__DSH_MOBILE_FRONTEND__ = "dedicated";</script>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #17181c; color: #e6e6e6;
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  .dshm-shell { display: grid; grid-template-columns: minmax(0, 1fr); height: 100vh; }
+  .dshm-main { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
+  .dshm-panelNav { display: flex; align-items: center; gap: 8px; min-height: 56px;
+    padding: max(4px, env(safe-area-inset-top)) 12px 4px 68px; border-bottom: .5px solid #333; }
+  .dshm-mainContent { position: relative; flex: 1; min-width: 0; min-height: 0; overflow: hidden; }
+  [data-slot="main"] { display: contents; }
+  /* A deliberately desktop-first panel: no hit floor, full width, desktop sizes. */
+  .plugin-panel { display: flex; flex-direction: column; gap: 12px; padding: 16px; width: 100%; }
+  .plugin-panel h2 { margin: 0; font-size: 16px; }
+  .plugin-row { display: flex; align-items: center; gap: 8px; }
+  .plugin-btn { min-height: 28px; padding: 0 10px; border: 0; border-radius: 8px;
+    background: #262933; color: inherit; font: inherit; }
+  .plugin-iconbtn { display: inline-flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px; padding: 0; border: 0; border-radius: 6px;
+    background: transparent; color: #9aa0ab; }
+  .plugin-input { min-height: 32px; width: 100%; padding: 4px 8px; border: 1px solid #3a3d45;
+    border-radius: 8px; background: #16171b; color: inherit; font: inherit; }
+  .plugin-select { min-height: 32px; width: 100%; padding: 4px 8px; border: 1px solid #3a3d45;
+    border-radius: 8px; background: #16171b; color: inherit; font: inherit; }
+  .dshm-drawer { position: fixed; inset: 0 auto 0 0; width: 56px; background: #1a1c22;
+    padding-top: env(safe-area-inset-top); overflow: hidden; }
+  .dshm-drawer .rail { width: 56px; height: 100%; display: grid; place-items: start center; padding-top: 12px; }
+  /* The drawer is a 56px rail when collapsed and a 280px overlay when open; the
+     shell's own sidebar rows are desktop-density until a pack raises the floor. */
+  .dshm-drawer[data-open="true"] { width: 280px; }
+  .dshm-drawer[data-open="true"] .rail { display: none; }
+  .dshm-drawer [data-slot="sidebar"] { display: flex; flex-direction: column; gap: 4px; padding: 12px 8px; }
+  .rail-btn { min-height: 28px; padding: 0 10px; border: 0; border-radius: 8px;
+    background: transparent; color: inherit; font: inherit; text-align: left; }
+  /* A fixed widget pinned to the bottom-right corner, like a cost bubble or a
+     helper entry point. It sits outside .dshm-shell and is not a panel. */
+  .float-widget { position: fixed; right: 8px; bottom: 0; width: 112px; height: 118px;
+    z-index: 9999; border-radius: 12px 12px 0 0; background: #2b3350; color: #cfd8ff;
+    font-size: 11px; text-align: center; padding-top: 8px; }
+</style></head>
+<body>
+  <div class="dshm-shell">
+    <main class="dshm-main" data-pane="conversation">
+      <div class="dshm-panelNav"><button type="button" aria-label="返回会话">‹ 返回会话</button></div>
+      <div class="dshm-mainContent">
+        <div data-slot="main">
+          <div class="plugin-panel"${optOut === true ? ' data-dsh-adapt="off"' : ''}>
+            <h2>插件面板</h2>
+            <div class="plugin-row">
+              <button type="button" class="plugin-btn">新建</button>
+              <button type="button" class="plugin-iconbtn" aria-label="更多">···</button>
+            </div>
+            <input class="plugin-input" placeholder="搜索">
+            <select class="plugin-select"><option>全部</option></select>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+  <aside class="dshm-drawer" data-open="false"><div class="rail">≡</div><div data-slot="sidebar">
+    <button type="button" class="rail-btn">会话</button>
+    <button type="button" class="rail-btn">文件</button>
+    <button type="button" class="rail-btn">设置</button>
+  </div></aside>
+  <div class="float-widget">float widget</div>
+</body></html>`
+
+/**
+ * Runs inside the page after the pack's CSS and JS are in place. The activation
+ * shim mirrors the host: mobile.js is evaluated as a classic script, its
+ * `window.dshMobile.define` definition is collected, and `activate(api)` gets a
+ * minimal but honest API (document/window/signal + inert host/ui/native stubs).
+ */
+async function installPack(pack) {
+  const queue = window.__checkPackDefinitions ?? []
+  const results = []
+  // The host keeps one definition per id (a later define replaces an earlier one).
+  const byId = new Map()
+  for (const definition of queue) byId.set(definition.id, definition)
+  for (const definition of byId.values()) {
+    const controller = new AbortController()
+    const api = {
+      document,
+      window,
+      signal: controller.signal,
+      host: {
+        invoke: async () => undefined,
+        fetch: async () => new Response('', { status: 404 }),
+        assetUrl: value => String(value),
+      },
+      ui: {
+        registerSurface: () => ({ dispose() {} }),
+        open: () => undefined,
+        close: () => undefined,
+        toast: () => undefined,
+      },
+      native: {
+        capabilities: async () => [],
+        invoke: async () => undefined,
+      },
+    }
+    try {
+      const cleanup = await definition.activate(api)
+      results.push({
+        id: definition.id,
+        apiVersion: definition.apiVersion,
+        activate: 'resolved',
+        cleanup: typeof cleanup === 'function',
+      })
+    } catch (error) {
+      results.push({
+        id: definition.id,
+        apiVersion: definition.apiVersion,
+        activate: 'threw',
+        error: String(error instanceof Error ? error.message : error),
+      })
+    }
+  }
+  return results
+}
+
+/** Runs inside the page; returns every number the assertions and tables use. */
+function measurePage() {
+  const round = value => Math.round(value * 10) / 10
+  const rect = element => {
+    if (element === null || element === undefined) return null
+    const box = element.getBoundingClientRect()
+    return {
+      left: round(box.left),
+      right: round(box.right),
+      top: round(box.top),
+      bottom: round(box.bottom),
+      width: round(box.width),
+      height: round(box.height),
+    }
+  }
+  const visible = element => {
+    if (element === null) return false
+    const style = getComputedStyle(element)
+    if (style.display === 'none' || style.visibility === 'hidden') return false
+    const box = element.getBoundingClientRect()
+    return box.width > 0 && box.height > 0
+  }
+  const panel = document.querySelector('[data-slot="main"] > *')
+  const controlSelector = '[data-slot="main"] :is(button, [role="button"], select, input, textarea)'
+  const controls = [...document.querySelectorAll(controlSelector)].filter(visible).map(element => ({
+    tag: element.tagName.toLowerCase(),
+    role: element.getAttribute('role'),
+    ariaLabel: element.getAttribute('aria-label'),
+    ...rect(element),
+  }))
+  const main = document.querySelector('.dshm-main')
+  const content = document.querySelector('.dshm-mainContent')
+  const contentStyle = content === null ? null : getComputedStyle(content)
+  const sidebarButtons = [...document.querySelectorAll('.dshm-drawer [data-slot="sidebar"] :is(button, [role="button"])')]
+    .map(element => ({
+      tag: element.tagName.toLowerCase(),
+      text: (element.textContent ?? '').trim().slice(0, 12),
+      ...rect(element),
+    }))
+  return {
+    viewport: { width: window.innerWidth, height: window.innerHeight },
+    coarse: window.matchMedia('(pointer: coarse)').matches,
+    panel: rect(panel),
+    button: rect(document.querySelector('.plugin-btn')),
+    iconButton: rect(document.querySelector('.plugin-iconbtn')),
+    input: rect(document.querySelector('.plugin-input')),
+    select: rect(document.querySelector('.plugin-select')),
+    panelNavButton: rect(document.querySelector('.dshm-panelNav button')),
+    sidebarButtons,
+    drawer: rect(document.querySelector('.dshm-drawer')),
+    controls,
+    panelState: main === null ? null : main.getAttribute('data-dsh-panel'),
+    floater: rect(document.querySelector('.float-widget')),
+    floatersVar: getComputedStyle(document.documentElement).getPropertyValue('--dshm-floaters').trim(),
+    floatersFlag: document.documentElement.getAttribute('data-dsh-floaters'),
+    panelMarginBottom: panel === null ? null : getComputedStyle(panel).marginBottom,
+    mainContent: contentStyle === null ? null : {
+      paddingLeft: contentStyle.paddingLeft,
+      marginLeft: contentStyle.marginLeft,
+      overflowX: contentStyle.overflowX,
+      overflowY: contentStyle.overflowY,
+    },
+    scrollWidth: document.documentElement.scrollWidth,
+    styleNodeCount: document.querySelectorAll('style').length,
+  }
+}
+
+async function runFixture(browser, options) {
+  const { device, pack, optOut } = options
+  const viewport = device === 'mobile' ? MOBILE_VIEWPORT : DESKTOP_VIEWPORT
+  const context = await browser.newContext({
+    viewport,
+    hasTouch: device === 'mobile',
+    isMobile: device === 'mobile',
+    deviceScaleFactor: device === 'mobile' ? 2 : 1,
+  })
+  const errors = []
+  try {
+    const page = await context.newPage()
+    await page.setContent(FIXTURE(optOut), { waitUntil: 'load' })
+
+    if (pack !== null && pack.css !== null) {
+      try {
+        await page.addStyleTag({ content: pack.css })
+      } catch (error) {
+        errors.push(`加载 mobile.css 失败：${error instanceof Error ? error.message : error}`)
+      }
+    }
+
+    let activation = []
+    if (pack !== null && pack.js !== null) {
+      await page.evaluate(() => {
+        window.__checkPackDefinitions = []
+        window.dshMobile = {
+          define(definition) { window.__checkPackDefinitions.push(definition) },
+          register() {},
+        }
+      })
+      try {
+        await page.addScriptTag({ content: pack.js })
+      } catch (error) {
+        errors.push(`执行 mobile.js 失败：${error instanceof Error ? error.message : error}`)
+      }
+      if (errors.length === 0) {
+        activation = await page.evaluate(installPack, {})
+        if (activation.length > 0) {
+          await page.waitForFunction(
+            () => document.querySelector('.dshm-main')?.hasAttribute('data-dsh-panel') === true
+              || document.documentElement.hasAttribute('data-dsh-floaters'),
+            undefined,
+            { timeout: 1500 },
+          ).catch(() => undefined)
+          await page.waitForTimeout(350)
+        }
+      }
+    }
+
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+    const metrics = await page.evaluate(measurePage)
+
+    // The drawer is a rail when collapsed and an overlay when open; a shell pack
+    // targets the open state (the thumb is what taps those rows), so measure it
+    // with the drawer open as a second reading of the same page.
+    let scrolled = null
+    if (device === 'mobile') {
+      scrolled = await page.evaluate(() => {
+        const content = document.querySelector('.dshm-mainContent')
+        if (content === null) return null
+        content.scrollTop = content.scrollHeight
+        return new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => {
+          const panel = document.querySelector('[data-slot="main"] > *')
+          const floater = document.querySelector('.float-widget')
+          resolve({
+            contentScrollTop: Math.round(content.scrollTop),
+            contentScrollable: content.scrollHeight > content.clientHeight + 1,
+            panelBottom: panel === null ? null : Math.round(panel.getBoundingClientRect().bottom),
+            floaterTop: floater === null ? null : Math.round(floater.getBoundingClientRect().top),
+          })
+        })))
+      })
+    }
+
+    let openMetrics = null
+    {
+      const opened = await page.evaluate(() => {
+        const drawer = document.querySelector('.dshm-drawer')
+        if (drawer === null) return false
+        drawer.setAttribute('data-open', 'true')
+        return true
+      })
+      if (opened === true) {
+        await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+        openMetrics = await page.evaluate(measurePage)
+      }
+    }
+    return { metrics, openMetrics, scrolled, activation, errors, viewport }
+  } finally {
+    await context.close()
+  }
+}
+
+// ---------------------------------------------------------------- runtime assertions
+
+const near = (left, right, epsilon = EPSILON) => Math.abs(left - right) <= epsilon
+const fmt = value => (value === null || value === undefined ? '—' : `${value}px`)
+
+function checkDefinition(report, layer, fixture, packId) {
+  const { activation, errors } = fixture
+  if (errors.length > 0) {
+    for (const message of errors) report.fail(layer, 'runtime.script', message)
+    return
+  }
+  if (activation.length === 0) {
+    report.fail(layer, 'runtime.define', 'mobile.js 执行后没有调用 window.dshMobile.define，包不会激活')
+    return
+  }
+  if (activation.length > 1) {
+    report.fail(layer, 'runtime.define', `mobile.js 注册了 ${activation.length} 个不同 id 的定义，一个包只能注册一个`)
+    return
+  }
+  const [definition] = activation
+  if (definition.apiVersion !== 1) {
+    report.fail(layer, 'runtime.definition', `define 的 apiVersion 是 ${definition.apiVersion}，必须为 1`)
+  } else if (definition.id !== packId) {
+    report.fail(layer, 'runtime.definition', `define 的 id（${definition.id}）与目录名（${packId}）不一致`)
+  } else if (definition.activate !== 'resolved') {
+    report.fail(layer, 'runtime.definition', `activate 抛出异常：${definition.error ?? '未知错误'}`)
+  } else {
+    report.pass(layer, 'runtime.definition', `define 已注册 id=${definition.id}，activate 已执行${definition.cleanup ? '并返回清理函数' : ''}`)
+  }
+}
+
+function validateBaseline(report, fixture, device) {
+  const metrics = fixture.metrics
+  const viewport = device === 'mobile' ? MOBILE_VIEWPORT : DESKTOP_VIEWPORT
+  const label = `${viewport.width}×${viewport.height}`
+  const failures = []
+  if (metrics.viewport.width !== viewport.width || metrics.viewport.height !== viewport.height) {
+    failures.push(`视口是 ${metrics.viewport.width}×${metrics.viewport.height}，期望 ${viewport.width}×${viewport.height}`)
+  }
+  if (device === 'mobile' && metrics.coarse !== true) failures.push('粗指针环境没有生效（(pointer: coarse) 为 false）')
+  if (device === 'desktop' && metrics.coarse !== false) failures.push('精指针环境没有生效（(pointer: coarse) 为 true）')
+  if (metrics.button === null || metrics.button.height > 30) failures.push(`基线按钮高度 ${fmt(metrics.button?.height)}，期望桌面优先的 28px`)
+  if (metrics.input === null || metrics.input.height > 34) failures.push(`基线输入高度 ${fmt(metrics.input?.height)}，期望桌面优先的 32px`)
+  if (metrics.panel === null || metrics.panel.left > 1) failures.push(`基线面板左缘 ${fmt(metrics.panel?.left)}，期望 0`)
+  // Shell chrome must start below the floor too, otherwise a shell pack would
+  // "pass" without having changed anything.
+  if (metrics.panelNavButton === null || metrics.panelNavButton.height > 32) {
+    failures.push(`基线返回栏按钮高度 ${fmt(metrics.panelNavButton?.height)}，期望桌面优先的 28px`)
+  }
+  const openRows = fixture.openMetrics?.sidebarButtons ?? []
+  if (openRows.length === 0) {
+    failures.push('抽屉展开后没有可测的侧栏按钮')
+  } else if (openRows.some(row => row.height > 32)) {
+    failures.push(`基线抽屉侧栏按钮高度 ${fmt(openRows[0].height)}，期望桌面优先的 28px`)
+  }
+  for (const failure of failures) report.fail('runtime', `runtime.${device}.fixture`, `${label} fixture 基线不成立：${failure}`)
+  if (failures.length === 0) {
+    report.pass('runtime', `runtime.${device}.fixture`, `${label} fixture 基线成立（按钮 ${fmt(metrics.button.height)} / 输入 ${fmt(metrics.input.height)} / 面板左缘 ${fmt(metrics.panel.left)} / 返回栏 ${fmt(metrics.panelNavButton?.height)} / 抽屉行 ${fmt(openRows[0]?.height)}）`)
+  }
+  return failures.length === 0
+}
+
+function checkMobileAssertions(report, baseline, after, packId, hasScript) {
+  const layer = 'runtime'
+  if (after.metrics.coarse !== true) {
+    report.fail(layer, 'runtime.mobile.pointer', '390×844 环境没有报告粗指针，媒体查询不会生效')
+  } else {
+    report.pass(layer, 'runtime.mobile.pointer', '390×844 · (pointer: coarse) 生效')
+  }
+  if (hasScript === true) checkDefinition(report, layer, after, packId)
+  else report.skip(layer, 'runtime.define', '没有 mobile.js（纯 CSS 包）：跳过 define 校验')
+
+  // Each group runs only when the catalog says the pack claims that capability,
+  // so a shell-only pack is not failed for leaving plugin panels alone.
+  const grew = []
+  const buttons = after.metrics.controls.filter(control => control.tag === 'button' || control.role === 'button')
+  const fields = after.metrics.controls.filter(control => control.tag !== 'button' && control.role !== 'button')
+  if (covers(report, 'hit-target')) {
+    const buttonFailures = buttons.filter(control => Math.min(control.width, control.height) < HIT_TARGET - EPSILON)
+    if (buttons.length === 0) {
+      report.fail(layer, 'runtime.mobile.button', 'fixture 面板里没有可测按钮')
+    } else if (buttonFailures.length > 0) {
+      report.fail(layer, 'runtime.mobile.button', `面板内有 ${buttonFailures.length}/${buttons.length} 个按钮小于 ${HIT_TARGET}px：${summarizeControls(buttonFailures)}`)
+    } else {
+      report.pass(layer, 'runtime.mobile.button', `面板内 ${buttons.length} 个按钮的最小边 ≥ ${HIT_TARGET}px`)
+    }
+
+    const fieldFailures = fields.filter(control => control.height < HIT_TARGET - EPSILON)
+    if (fields.length === 0) {
+      report.fail(layer, 'runtime.mobile.input', 'fixture 面板里没有可测输入控件')
+    } else if (fieldFailures.length > 0) {
+      report.fail(layer, 'runtime.mobile.input', `面板内有 ${fieldFailures.length}/${fields.length} 个输入控件小于 ${HIT_TARGET}px：${summarizeControls(fieldFailures)}`)
+    } else {
+      report.pass(layer, 'runtime.mobile.input', `面板内 ${fields.length} 个输入控件高度 ≥ ${HIT_TARGET}px`)
+    }
+
+    if (after.metrics.iconButton !== null && after.metrics.iconButton.width < HIT_TARGET - EPSILON) {
+      report.fail(layer, 'runtime.mobile.iconButton', `图标按钮宽 ${fmt(after.metrics.iconButton.width)}，小于 ${HIT_TARGET}px（svg-only 按钮要 ≥ ${HIT_TARGET}×${HIT_TARGET}）`)
+    } else if (after.metrics.iconButton !== null) {
+      report.pass(layer, 'runtime.mobile.iconButton', `图标按钮 ${fmt(after.metrics.iconButton.width)}×${fmt(after.metrics.iconButton.height)}`)
+    }
+    if (after.metrics.button.height > baseline.metrics.button.height + 1) grew.push('按钮')
+  } else {
+    report.skip(layer, 'runtime.mobile.button', 'catalog 未声明 hit-target：跳过面板命中下限')
+  }
+
+  if (covers(report, 'rail-clearance')) {
+    const panel = after.metrics.panel
+    if (panel === null) {
+      report.fail(layer, 'runtime.mobile.panel', '找不到面板根（[data-slot="main"] > *）')
+    } else if (panel.left < RAIL_WIDTH - EPSILON) {
+      report.fail(layer, 'runtime.mobile.panel.left', `面板左缘 x=${fmt(panel.left)}，没有让开 ${RAIL_WIDTH}px 折叠轨道`)
+    } else {
+      report.pass(layer, 'runtime.mobile.panel.left', `面板左缘 x=${fmt(panel.left)}（≥ ${RAIL_WIDTH}px）`)
+      if (panel.left > baseline.metrics.panel.left + 1) grew.push('让位')
+    }
+  } else {
+    report.skip(layer, 'runtime.mobile.panel.left', 'catalog 未声明 rail-clearance：跳过轨道让位')
+  }
+
+  if (covers(report, 'width-reclaim')) {
+    const panel = after.metrics.panel
+    if (panel !== null && panel.right > MOBILE_VIEWPORT.width + EPSILON) {
+      report.fail(layer, 'runtime.mobile.panel.right', `面板右缘 x=${fmt(panel.right)}，超出 ${MOBILE_VIEWPORT.width}px 视口`)
+    } else if (panel !== null) {
+      report.pass(layer, 'runtime.mobile.panel.right', `面板右缘 x=${fmt(panel.right)}（≤ ${MOBILE_VIEWPORT.width}px）`)
+    }
+    if (after.metrics.scrollWidth > MOBILE_VIEWPORT.width + EPSILON) {
+      report.fail(layer, 'runtime.mobile.overflow', `页面 scrollWidth=${after.metrics.scrollWidth}，横向被撑宽`)
+    } else {
+      report.pass(layer, 'runtime.mobile.overflow', `页面 scrollWidth=${after.metrics.scrollWidth}（无横向溢出）`)
+    }
+  } else {
+    report.skip(layer, 'runtime.mobile.overflow', 'catalog 未声明 width-reclaim：跳过宽度回收')
+  }
+
+  if (covers(report, 'shell-hit-target') && checkShellAssertions(report, baseline, after) === true) grew.push('外壳')
+  if (covers(report, 'floater-clearance') && checkFloaterAssertions(report, baseline, after) === true) grew.push('浮动控件让位')
+
+  if (grew.length === 0) {
+    report.fail(layer, 'runtime.mobile.applied', '适配没有改变任何基线数值：规则没有生效（或作用域不对）')
+  } else {
+    report.pass(layer, 'runtime.mobile.applied', `适配生效：${grew.join(' / ')}`)
+  }
+  return { buttons, fields }
+}
+
+/**
+ * Floating widgets: a fixed, bottom-right element sits over the panel. The pack
+ * must not move it (that would need the third party's own class names); it has to
+ * measure the space and give the panel room to scroll clear of it.
+ */
+function checkFloaterAssertions(report, baseline, after) {
+  const layer = 'runtime'
+  const floater = after.metrics.floater ?? baseline.metrics.floater
+  if (floater === null || floater === undefined) {
+    report.fail(layer, 'runtime.floater.fixture', 'fixture 里没有右下角浮动控件，无法验证让位')
+    return false
+  }
+  let changed = false
+
+  const declared = Number.parseFloat(after.metrics.floatersVar ?? '')
+  if (!Number.isFinite(declared) || declared <= 0) {
+    report.fail(layer, 'runtime.floater.measure', `没有量出浮动控件高度（--dshm-floaters = ${after.metrics.floatersVar || '未设置'}）`)
+  } else if (declared < floater.height - 1) {
+    report.fail(layer, 'runtime.floater.measure', `量出的让位 ${declared}px 小于浮动控件高度 ${floater.height}px`)
+  } else {
+    changed = true
+    report.pass(layer, 'runtime.floater.measure', `量出浮动控件 ${floater.width}×${floater.height}，写入 --dshm-floaters=${declared}px`)
+  }
+
+  const overflowY = after.metrics.mainContent?.overflowY ?? ''
+  if (overflowY !== 'auto' && overflowY !== 'scroll') {
+    report.fail(layer, 'runtime.floater.scroll', `面板状态下 mainContent 的 overflow-y 是 ${overflowY || '—'}，内容无法滚到浮动控件上方`)
+  } else {
+    report.pass(layer, 'runtime.floater.scroll', `mainContent overflow-y=${overflowY}，可把末尾内容滚到控件上方`)
+  }
+
+  const margin = Number.parseFloat(after.metrics.panelMarginBottom ?? '')
+  if (!Number.isFinite(margin) || margin < floater.height - 1) {
+    report.fail(layer, 'runtime.floater.gap', `面板根 margin-bottom = ${after.metrics.panelMarginBottom || '—'}，没有留出 ${floater.height}px`)
+  } else {
+    report.pass(layer, 'runtime.floater.gap', `面板根 margin-bottom = ${after.metrics.panelMarginBottom}`)
+  }
+
+  const scrolled = after.scrolled
+  if (scrolled === null || scrolled === undefined) {
+    report.fail(layer, 'runtime.floater.reach', '无法读取滚动到底后的位置')
+  } else if (scrolled.panelBottom === null || scrolled.floaterTop === null) {
+    report.fail(layer, 'runtime.floater.reach', '滚动到底后找不到面板根或浮动控件')
+  } else if (scrolled.panelBottom > scrolled.floaterTop + 1) {
+    report.fail(layer, 'runtime.floater.reach', `滚到底后面板底部 y=${scrolled.panelBottom} 仍在浮动控件顶部 y=${scrolled.floaterTop} 之下（内容仍被压住）`)
+  } else {
+    report.pass(layer, 'runtime.floater.reach', `滚到底后面板底部 y=${scrolled.panelBottom} ≤ 控件顶部 y=${scrolled.floaterTop}`)
+  }
+  return changed
+}
+
+/**
+ * Shell chrome: the panel's return bar and the open navigation drawer. Both are
+ * always on screen, so they are gated by the coarse pointer alone rather than by
+ * a panel state. `after.openMetrics` is the same page with the drawer open.
+ */
+function checkShellAssertions(report, baseline, after) {
+  const layer = 'runtime'
+  let changed = false
+  const bar = after.metrics.panelNavButton
+  if (bar === null) {
+    report.fail(layer, 'runtime.shell.returnBar', 'fixture 里没有返回栏按钮（.dshm-panelNav button）')
+  } else if (bar.height < HIT_TARGET - EPSILON || bar.width < HIT_TARGET - EPSILON) {
+    report.fail(layer, 'runtime.shell.returnBar', `返回栏按钮 ${fmt(bar.width)}×${fmt(bar.height)}，小于 ${HIT_TARGET}px`)
+  } else {
+    const before = baseline.metrics.panelNavButton
+    if (before === null || bar.height > before.height + 1) changed = true
+    report.pass(layer, 'runtime.shell.returnBar', `返回栏按钮 ${fmt(bar.width)}×${fmt(bar.height)}${before === null ? '' : `（基线 ${fmt(before.width)}×${fmt(before.height)}）`}`)
+  }
+
+  const open = after.openMetrics
+  const rows = open === null || open === undefined ? [] : open.sidebarButtons
+  if (rows.length === 0) {
+    report.fail(layer, 'runtime.shell.drawer', 'fixture 里没有抽屉侧栏按钮（.dshm-drawer [data-slot="sidebar"] button）')
+  } else {
+    const tooSmall = rows.filter(row => row.height < HIT_TARGET - EPSILON)
+    if (tooSmall.length > 0) {
+      report.fail(layer, 'runtime.shell.drawer', `抽屉展开后 ${tooSmall.length}/${rows.length} 个侧栏按钮高度小于 ${HIT_TARGET}px：${tooSmall.map(row => `${row.text} ${row.height}px`).join('、')}`)
+    } else {
+      const baseRows = baseline.openMetrics?.sidebarButtons ?? []
+      if (baseRows.length > 0 && rows[0].height > baseRows[0].height + 1) changed = true
+      report.pass(layer, 'runtime.shell.drawer', `抽屉展开后 ${rows.length} 个侧栏按钮高度 ≥ ${HIT_TARGET}px${baseRows.length > 0 ? `（基线 ${fmt(baseRows[0].height)}）` : ''}`)
+    }
+  }
+  return changed
+}
+
+function checkOptOut(report, baseline, optOut) {
+  const layer = 'runtime'
+  const failures = []
+  const compare = (label, actual, expected) => {
+    if (actual === null || expected === null || near(actual, expected) === false) {
+      failures.push(`${label} ${fmt(actual)} ≠ 基线 ${fmt(expected)}`)
+    }
+  }
+  compare('按钮高度', optOut.metrics.button?.height, baseline.metrics.button?.height)
+  compare('图标按钮宽度', optOut.metrics.iconButton?.width, baseline.metrics.iconButton?.width)
+  compare('输入高度', optOut.metrics.input?.height, baseline.metrics.input?.height)
+  compare('下拉高度', optOut.metrics.select?.height, baseline.metrics.select?.height)
+  compare('面板左缘', optOut.metrics.panel?.left, baseline.metrics.panel?.left)
+  compare('面板右缘', optOut.metrics.panel?.right, baseline.metrics.panel?.right)
+  compare('面板宽度', optOut.metrics.panel?.width, baseline.metrics.panel?.width)
+  // The opt-out marker sits on the document element in this fixture, so it has
+  // to silence shell rules too — a shell pack that only looks at the panel root
+  // would keep patting the thumb while the user asked it to stop.
+  compare('返回栏按钮高度', optOut.metrics.panelNavButton?.height, baseline.metrics.panelNavButton?.height)
+  compare('面板根 margin-bottom', Number.parseFloat(optOut.metrics.panelMarginBottom ?? '0'), Number.parseFloat(baseline.metrics.panelMarginBottom ?? '0'))
+  compare('--dshm-floaters', Number.parseFloat(optOut.metrics.floatersVar || '0') || 0, 0)
+  compare('抽屉侧栏按钮高度', optOut.openMetrics?.sidebarButtons?.[0]?.height, baseline.openMetrics?.sidebarButtons?.[0]?.height)
+  if (failures.length > 0) {
+    report.fail(layer, 'runtime.optOut', `data-dsh-adapt="off" 没有让适配完全失效：${failures.join('；')}`)
+  } else {
+    report.pass(layer, 'runtime.optOut', 'data-dsh-adapt="off" 时面板与外壳数值全部回落到基线')
+  }
+}
+
+function checkDesktop(report, baseline, after, strict) {
+  const layer = 'runtime'
+  const failures = []
+  const compare = (label, actual, expected) => {
+    if (actual === null || expected === null || near(actual, expected) === false) {
+      failures.push(`${label} ${fmt(actual)} ≠ ${fmt(expected)}`)
+    }
+  }
+  compare('按钮高度', after.metrics.button?.height, baseline.metrics.button?.height)
+  compare('输入高度', after.metrics.input?.height, baseline.metrics.input?.height)
+  compare('面板左缘', after.metrics.panel?.left, baseline.metrics.panel?.left)
+  compare('面板右缘', after.metrics.panel?.right, baseline.metrics.panel?.right)
+  compare('面板宽度', after.metrics.panel?.width, baseline.metrics.panel?.width)
+  compare('scrollWidth', after.metrics.scrollWidth, baseline.metrics.scrollWidth)
+  compare('返回栏按钮', after.metrics.panelNavButton?.height, baseline.metrics.panelNavButton?.height)
+  compare('抽屉侧栏按钮', after.openMetrics?.sidebarButtons?.[0]?.height, baseline.openMetrics?.sidebarButtons?.[0]?.height)
+  if (failures.length > 0) {
+    report.fail(layer, 'runtime.desktop.zero-change', `1280×800 精指针下适配改动了桌面：${failures.join('；')}`)
+  } else {
+    report.pass(layer, 'runtime.desktop.zero-change', '1280×800 精指针下按钮 / 输入 / 面板几何与基线逐项一致')
+  }
+
+  if (strict === true) {
+    const strictFailures = []
+    if (after.metrics.mainContent?.paddingLeft !== baseline.metrics.mainContent?.paddingLeft) {
+      strictFailures.push(`mainContent padding-left ${after.metrics.mainContent?.paddingLeft} ≠ ${baseline.metrics.mainContent?.paddingLeft}`)
+    }
+    if (after.metrics.mainContent?.marginLeft !== baseline.metrics.mainContent?.marginLeft) {
+      strictFailures.push(`mainContent margin-left ${after.metrics.mainContent?.marginLeft} ≠ ${baseline.metrics.mainContent?.marginLeft}`)
+    }
+    if (after.metrics.mainContent?.overflowX !== baseline.metrics.mainContent?.overflowX) {
+      strictFailures.push(`mainContent overflow-x ${after.metrics.mainContent?.overflowX} ≠ ${baseline.metrics.mainContent?.overflowX}`)
+    }
+    if (after.metrics.mainContent?.overflowY !== baseline.metrics.mainContent?.overflowY) {
+      strictFailures.push(`mainContent overflow-y ${after.metrics.mainContent?.overflowY} ≠ ${baseline.metrics.mainContent?.overflowY}`)
+    }
+    const beforeControls = baseline.metrics.controls
+    const afterControls = after.metrics.controls
+    if (beforeControls.length !== afterControls.length) {
+      strictFailures.push(`控件数量 ${afterControls.length} ≠ ${beforeControls.length}`)
+    } else {
+      for (let index = 0; index < beforeControls.length; index += 1) {
+        const before = beforeControls[index]
+        const now = afterControls[index]
+        for (const side of ['width', 'height', 'left', 'right']) {
+          if (near(now[side], before[side]) === false) {
+            strictFailures.push(`第 ${index + 1} 个控件（${before.tag}）${side} ${now[side]} ≠ ${before[side]}`)
+          }
+        }
+      }
+    }
+    if (strictFailures.length > 0) {
+      report.fail(layer, 'runtime.desktop.strict', `--desktop 严格零回归失败：${strictFailures.slice(0, 6).join('；')}`)
+    } else {
+      report.pass(layer, 'runtime.desktop.strict', '--desktop 严格零回归：mainContent 盒模型与全部控件矩形均未改动')
+    }
+  }
+}
+
+function summarizeControls(controls) {
+  return controls
+    .slice(0, 4)
+    .map(control => `${control.tag}${control.ariaLabel === null ? '' : `[${control.ariaLabel}]`} ${control.width}×${control.height}`)
+    .join('、')
+}
+
+// ---------------------------------------------------------------- Playwright
+
+async function loadPlaywright() {
+  if (process.env.DSH_PLAYWRIGHT !== undefined && process.env.DSH_PLAYWRIGHT !== '') {
+    return await import(pathToFileURL(process.env.DSH_PLAYWRIGHT).href)
+  }
+  const home = process.env.DSH_HOME ?? path.join(homedir(), '.dsh')
+  for (const profile of ['web', 'desktop', 'headless']) {
+    const anchor = path.join(home, 'profiles', profile, 'package.json')
+    if (existsSync(anchor) === false) continue
+    try {
+      return createRequire(anchor)('playwright')
+    } catch {
+      // next profile
+    }
+  }
+  try {
+    const anchor = path.join(REPO, 'package.json')
+    return createRequire(anchor)('playwright')
+  } catch {
+    return await import('playwright')
+  }
+}
+
+// ---------------------------------------------------------------- driver
+
+async function checkPack(browser, pathArgument, skip, options) {
+  const report = new PackReport(pathArgument.id, pathArgument.path)
+  if (skip !== null) {
+    report.skip('static', 'pack.skipped', skip)
+    return report
+  }
+  const staticData = inspectStatic(report)
+  // A missing or broken manifest still runs the runtime layers, so the author
+  // sees every layer in one run instead of one error at a time.
+
+  let baselineMetrics = null
+  try {
+    const baselineMobile = await runFixture(browser, { device: 'mobile', pack: null, optOut: false })
+    const baselineDesktop = await runFixture(browser, { device: 'desktop', pack: null, optOut: false })
+    baselineMetrics = {
+      mobile: baselineMobile.metrics,
+      desktop: baselineDesktop.metrics,
+    }
+    validateBaseline(report, baselineMobile, 'mobile')
+    validateBaseline(report, baselineDesktop, 'desktop')
+
+    const pack = { css: staticData.css, js: staticData.js === null ? null : staticData.js.source }
+    const mobile = await runFixture(browser, { device: 'mobile', pack, optOut: false })
+    const optOut = await runFixture(browser, { device: 'mobile', pack, optOut: true })
+    const desktop = await runFixture(browser, { device: 'desktop', pack, optOut: false })
+
+    report.measurements = {
+      mobile: { baseline: baselineMetrics.mobile, pack: mobile.metrics, optOut: optOut.metrics },
+      desktop: { baseline: baselineMetrics.desktop, pack: desktop.metrics },
+    }
+    checkMobileAssertions(report, baselineMobile, mobile, report.id, staticData.js !== null)
+    checkOptOut(report, baselineMobile, optOut)
+    checkDesktop(report, baselineDesktop, desktop, options.desktop)
+  } catch (error) {
+    report.error = error instanceof Error ? error.stack ?? error.message : String(error)
+    report.fail('runtime', 'runtime.error', `实测阶段失败：${error instanceof Error ? error.message : error}`)
+  }
+  return report
+}
+
+function listPackDirectories() {
+  if (existsSync(PACKS_DIR) === false) return []
+  return readdirSync(PACKS_DIR, { withFileTypes: true })
+    .filter(entry => entry.isDirectory() && entry.name.startsWith('_') === false)
+    .map(entry => path.join(PACKS_DIR, entry.name))
+}
+
+function usage() {
+  return [
+    '用法：node tools/check-pack.mjs [packs/<id> ...] [--json] [--desktop]',
+    '',
+    '  packs/<id>   要校验的包目录（可多个；缺省校验 packs/ 下全部非下划线目录）',
+    '  --json       输出机器可读 JSON（stdout 只有 JSON）',
+    '  --desktop    额外断言桌面严格零回归（mainContent 盒模型与全部控件矩形）',
+  ].join('\n')
+}
+
+function writeHuman(report) {
+  const lines = []
+  const counts = report.counts()
+  lines.push(`pack ${report.relative}（id ${report.id}）`)
+  const order = ['static', 'runtime']
+  for (const layer of order) {
+    const entries = report.assertions.filter(entry => entry.layer === layer)
+    if (entries.length === 0) continue
+    lines.push('')
+    lines.push(layer === 'static' ? 'STATIC' : 'RUNTIME')
+    for (const entry of entries) {
+      const label = entry.status === 'passed' ? 'PASS'
+        : entry.status === 'failed' ? 'FAIL'
+          : entry.status === 'warning' ? 'WARN'
+            : 'SKIP'
+      lines.push(`  ${label}  ${entry.message}`)
+    }
+  }
+
+  const measurements = report.measurements
+  if (measurements.mobile !== undefined) {
+    lines.push('')
+    lines.push('390×844 · coarse pointer')
+    lines.push(renderMetricTable([
+      ['按钮高度', measurements.mobile.baseline.button?.height, measurements.mobile.pack.button?.height, `≥ ${HIT_TARGET}px`],
+      ['图标按钮宽度', measurements.mobile.baseline.iconButton?.width, measurements.mobile.pack.iconButton?.width, `≥ ${HIT_TARGET}px`],
+      ['输入高度', measurements.mobile.baseline.input?.height, measurements.mobile.pack.input?.height, `≥ ${HIT_TARGET}px`],
+      ['下拉高度', measurements.mobile.baseline.select?.height, measurements.mobile.pack.select?.height, `≥ ${HIT_TARGET}px`],
+      ['面板左缘', measurements.mobile.baseline.panel?.left, measurements.mobile.pack.panel?.left, `≥ ${RAIL_WIDTH}px`],
+      ['面板右缘', measurements.mobile.baseline.panel?.right, measurements.mobile.pack.panel?.right, `≤ 390px`],
+    ]))
+
+    lines.push('')
+    lines.push('OPT-OUT · 面板根 data-dsh-adapt="off"')
+    lines.push(renderMetricTable([
+      ['按钮高度', measurements.mobile.baseline.button?.height, measurements.mobile.optOut.button?.height, '= 基线'],
+      ['输入高度', measurements.mobile.baseline.input?.height, measurements.mobile.optOut.input?.height, '= 基线'],
+      ['面板左缘', measurements.mobile.baseline.panel?.left, measurements.mobile.optOut.panel?.left, '= 基线'],
+      ['面板右缘', measurements.mobile.baseline.panel?.right, measurements.mobile.optOut.panel?.right, '= 基线'],
+    ]))
+
+    lines.push('')
+    lines.push('1280×800 · fine pointer')
+    lines.push(renderMetricTable([
+      ['按钮高度', measurements.desktop.baseline.button?.height, measurements.desktop.pack.button?.height, '= 基线'],
+      ['输入高度', measurements.desktop.baseline.input?.height, measurements.desktop.pack.input?.height, '= 基线'],
+      ['面板左缘', measurements.desktop.baseline.panel?.left, measurements.desktop.pack.panel?.left, '= 基线'],
+      ['面板右缘', measurements.desktop.baseline.panel?.right, measurements.desktop.pack.panel?.right, '= 基线'],
+    ]))
+  }
+
+  lines.push('')
+  const summary = `${counts.passed} passed · ${counts.failed} failed · ${counts.skipped} skipped${counts.warning === 0 ? '' : ` · ${counts.warning} warning`}`
+  lines.push(report.ok ? `RESULT PASS（${summary}）` : `RESULT FAIL（${summary}）`)
+  if (report.error !== null) lines.push(report.error)
+  return lines.join('\n')
+}
+
+function renderMetricTable(rows) {
+  const width = value => [...String(value)].reduce((total, character) => total + (character.codePointAt(0) > 0x2e80 ? 2 : 1), 0)
+  const padEnd = (value, size) => String(value) + ' '.repeat(Math.max(0, size - width(value)))
+  const padStart = (value, size) => ' '.repeat(Math.max(0, size - width(value))) + String(value)
+  const header = `${padEnd('  指标', 18)}${padStart('基线', 10)}${padStart('实测', 10)}${padStart('判据', 12)}`
+  const body = rows.map(([label, baseline, actual, rule]) => [
+    padEnd(`  ${label}`, 18),
+    padStart(fmt(baseline), 10),
+    padStart(fmt(actual), 10),
+    padStart(rule, 12),
+  ].join(''))
+  return [header, ...body].join('\n')
+}
+
+async function main() {
+  const reports = []
+  let browser = null
+  let fatal = null
+  try {
+    const { chromium } = await loadPlaywright()
+    browser = await chromium.launch({
+      args: ['--disable-background-networking', '--disable-component-update', '--no-first-run'],
+    })
+    for (const selection of selected) {
+      const report = await checkPack(browser, selection, selection.skip, flags)
+      reports.push(report)
+    }
+  } catch (error) {
+    fatal = error instanceof Error ? error.message : String(error)
+  } finally {
+    if (browser !== null) await browser.close().catch(() => undefined)
+  }
+
+  if (fatal !== null) {
+    if (flags.json === true) {
+      process.stdout.write(`${JSON.stringify({ tool: 'check-pack', version: 1, ok: false, error: fatal, packs: reports.map(serialize) }, null, 2)}\n`)
+    } else {
+      console.error(`check-pack 无法运行：${fatal}`)
+      console.error('需要 Playwright（npm install playwright）+ Chromium；本机可把 DSH_PLAYWRIGHT 指到已安装的 playwright。')
+    }
+    process.exit(1)
+  }
+
+  const ok = reports.every(report => report.ok)
+  if (flags.json === true) {
+    const payload = {
+      tool: 'check-pack',
+      version: 1,
+      ok,
+      generatedAt: new Date().toISOString(),
+      flags: { ...flags },
+      packs: reports.map(serialize),
+    }
+    process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`)
+  } else {
+    for (const report of reports) {
+      console.log(writeHuman(report))
+      console.log('')
+    }
+    const counts = reports.reduce((total, report) => {
+      const current = report.counts()
+      return {
+        passed: total.passed + current.passed,
+        failed: total.failed + current.failed,
+        skipped: total.skipped + current.skipped,
+        warning: total.warning + current.warning,
+      }
+    }, { passed: 0, failed: 0, skipped: 0, warning: 0 })
+    console.log(`check-pack · ${reports.length} pack(s) · ${counts.passed} passed · ${counts.failed} failed · ${counts.skipped} skipped${counts.warning === 0 ? '' : ` · ${counts.warning} warning`}`)
+  }
+  process.exit(ok ? 0 : 1)
+}
+
+function serialize(report) {
+  return {
+    id: report.id,
+    path: report.relative,
+    ok: report.ok,
+    error: report.error,
+    counts: report.counts(),
+    assertions: report.assertions,
+    measurements: report.measurements,
+  }
+}
+
+await main()

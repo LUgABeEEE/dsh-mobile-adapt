@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "id": "floaters",
+  "name": "Floaters",
+  "version": "0.1.0",
+  "description": "右下角浮动控件的让位：实测悬浮组件占用的高度，给插件面板留出可滚动空间，让内容不再被压在控件下面。"
+}

@@ -1,0 +1,125 @@
+{
+  "schemaVersion": 1,
+  "updated": "2026-10-30",
+  "runtime": {
+    "dshMobile": ">=0.8.0 <0.9.0",
+    "dsh": ">=0.2.1"
+  },
+  "packs": [
+    {
+      "id": "core-panel",
+      "status": "experimental",
+      "risk": "safe",
+      "default": "off",
+      "target": null,
+      "capabilities": [
+        "hit-target",
+        "width-reclaim",
+        "rail-clearance"
+      ],
+      "surfaces": [
+        "mobile-dedicated"
+      ],
+      "usesHostMarkers": [
+        ".dshm-main",
+        ".dshm-mainContent",
+        ".dshm-panelNav",
+        ".dshm-panelBack",
+        ".dshm-drawer"
+      ],
+      "verifiedWith": {
+        "dshMobile": "0.8.0",
+        "dsh": "0.2.1-rc.2"
+      },
+      "evidence": {
+        "level": "runtime-0.7.1",
+        "have": [
+          "check-pack 31/0/0：390×844 粗指针、1280×800 精指针、opt-out",
+          "独立实测 70/0（自写 fixture，关键数值与 check-pack 逐项一致）",
+          "dsh-mobile 0.8.0 lib/mobile-layout.js 文本层 21/21（五个宿主标记、56px 轨道仍在）",
+          "0.7.1 真实运行时加载（装进 extensions/，宿主注入 mobile.css、shim 写 data-dsh-panel、面板态按钮 28→44）"
+        ],
+        "missing": [
+          "0.8.0 运行时实测（authors ran 0.7.1；0.8.0 只做了 lib/mobile-layout.js 文本层核对）",
+          "真机验证（iOS / Android WebView，390×844 触摸）",
+          "真实 env(safe-area-inset-*) 与软键盘弹出后的可视区"
+        ],
+        "promotion": "补齐 0.8.0 运行时 + 真机实测后才可升 candidate；verifiedWith 是目标基线；实测环境是 0.7.1，未在 0.8.0 上跑过"
+      },
+      "since": "0.1.0"
+    },
+    {
+      "id": "shell-chrome",
+      "status": "experimental",
+      "risk": "safe",
+      "default": "off",
+      "target": null,
+      "scope": "shell",
+      "capabilities": [
+        "shell-hit-target"
+      ],
+      "surfaces": [
+        "mobile-dedicated"
+      ],
+      "usesHostMarkers": [
+        ".dshm-panelNav",
+        ".dshm-drawer",
+        "[data-slot=\"sidebar\"]"
+      ],
+      "verifiedWith": {
+        "dshMobile": "0.8.0",
+        "dsh": "0.2.1-rc.2"
+      },
+      "evidence": {
+        "level": "runtime-0.7.1",
+        "have": [
+          "check-pack 22/0/0（5 skip：面板断言按 capabilities 未声明而跳过）：返回栏 25→44、抽屉行 28→44、1280×800 精指针零改动、opt-out 回落",
+          "0.7.1 真实运行时：抽屉行 36→44，opt-out 后回 36；返回栏实测 48（本规则在该版本为兜底，不改变数值）",
+          "dsh-mobile 0.8.0 lib/mobile-layout.js 文本层：.dshm-panelNav / .dshm-drawer / [data-slot=sidebar] 仍在"
+        ],
+        "missing": [
+          "0.8.0 运行时实测",
+          "真机验证（iOS / Android WebView）"
+        ],
+        "promotion": "补齐 0.8.0 运行时 + 真机实测后才可升 candidate"
+      },
+      "since": "0.1.0"
+    },
+    {
+      "id": "floaters",
+      "status": "experimental",
+      "risk": "safe",
+      "default": "off",
+      "target": null,
+      "scope": "panel",
+      "capabilities": [
+        "floater-clearance"
+      ],
+      "surfaces": [
+        "mobile-dedicated"
+      ],
+      "usesHostMarkers": [
+        ".dshm-shell",
+        ".dshm-mainContent",
+        "[data-slot=\"main\"]"
+      ],
+      "verifiedWith": {
+        "dshMobile": "0.8.0",
+        "dsh": "0.2.1-rc.2"
+      },
+      "evidence": {
+        "level": "runtime-0.7.1",
+        "have": [
+          "check-pack 30/0/0（3 skip：面板三组断言按 capabilities 未声明而跳过）：量出 118px、margin 118px、滚到底面板底部 ≤ 控件顶部、opt-out 归零、1280×800 零改动",
+          "0.7.1 真实运行时：量出真实悬浮控件 122px，面板 margin-bottom 122px，滚到底 y=722 == 控件顶部 722；opt-out 后归零"
+        ],
+        "missing": [
+          "0.8.0 运行时实测",
+          "真机验证（iOS / Android WebView，含软键盘弹出时悬浮控件的位置变化）"
+        ],
+        "promotion": "补齐 0.8.0 运行时 + 真机实测后才可升 candidate"
+      },
+      "since": "0.1.0"
+    }
+  ]
+}

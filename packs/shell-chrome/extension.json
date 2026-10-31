@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "id": "shell-chrome",
+  "name": "Shell Chrome",
+  "version": "0.1.0",
+  "description": "外壳自身的触控下限：粗指针下把返回栏与展开抽屉里的按钮抬到 44px，可用 data-dsh-adapt=off 关闭。"
+}

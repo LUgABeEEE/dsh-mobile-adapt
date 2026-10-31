@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "id": "example-pack",
+  "name": "Example Pack",
+  "version": "0.1.0",
+  "description": "一句话说明这张包修的是哪个插件的哪个面板、在手机上解决什么问题。"
+}

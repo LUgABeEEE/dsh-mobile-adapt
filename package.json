@@ -1,0 +1,11 @@
+{
+  "name": "dsh-mobile-adapt",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Opt-in adaptation packs for the DSH mobile surface: 44px touch floor, rail clearance and floating-widget clearance for third-party plugin panels, loaded through dsh-mobile extensions.",
+  "license": "MIT",
+  "scripts": {
+    "check": "node tools/check-pack.mjs"
+  }
+}
