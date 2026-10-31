@@ -1,0 +1,39 @@
+/* dshmarket-mobile · 插件市场主面板的触控下限
+ *
+ * 目标插件：dshmarket（屏幕/侧栏入口「插件市场」，面板根 `[data-dsh-market-root]`）。
+ * 实测基线：1.73.3，stock DSH web 380/390×844（隔离实例）；dsh-mobile 专用移动页未验证。
+ *
+ * 只做一件事：粗指针下把面板内可操作控件抬到 WCAG 2.2 SC 2.5.5 的 44×44 下限，
+ * 并让输入框满足 iOS 聚焦不清缩放所需的 16px 字号：
+ *   - button / [role="button"] / select：最小边 ≥ 44px（图标按钮只有 svg，宽度也要兜住）；
+ *   - input / textarea：高 ≥ 44px、font-size ≥ 16px。
+ *
+ * 不声明（也不实现）width-reclaim / rail-clearance / floater-clearance：
+ *   - 390×844 实测面板右缘 = 视口右缘、documentElement.scrollWidth = innerWidth，
+ *     本来就不溢出，没有要修的东西；
+ *   - 轨道让位与浮动控件让位属于外壳/宿主职责，本包不越界。
+ *
+ * 作用域与 opt-out：
+ *   - 只在 (pointer: coarse) 下生效，精指针（桌面）逐项零改动；
+ *   - 选择器全部收敛在 `[data-slot="main"] [data-dsh-market-root]` 内，
+ *     不点名插件私有类（dshmarket 的 CSS Module 哈希类名一律不用）；
+ *   - `<html data-dsh-adapt="off">` 时全部规则失效（`:root:not(...)` 守卫），
+ *     面板回到插件自己的尺寸（按钮 28/32px、输入 24px）。
+ */
+
+@media (pointer: coarse) {
+  :root:not([data-dsh-adapt="off"]) [data-slot="main"] [data-dsh-market-root] :where(button, [role="button"], select) {
+    min-height: 44px !important;
+    min-width: 44px !important;
+  }
+
+  :root:not([data-dsh-adapt="off"]) [data-slot="main"] [data-dsh-market-root] :where(input:not([type="checkbox"]):not([type="radio"]), textarea) {
+    min-height: 44px !important;
+    font-size: max(16px, 1em) !important;
+  }
+
+  /* 去掉 300ms 双击缩放等待，让 44px 的控件按手指预期响应。 */
+  :root:not([data-dsh-adapt="off"]) [data-slot="main"] [data-dsh-market-root] :where(button, [role="button"], select, input, textarea) {
+    touch-action: manipulation;
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "id": "dshmarket-mobile",
+  "name": "dshmarket Mobile Floor",
+  "version": "0.1.0",
+  "description": "dshmarket 插件市场主面板的移动端触控下限：粗指针下按钮/图标按钮 ≥44×44、输入框 ≥44 高且字号 16px，可 opt-out。"
+}
