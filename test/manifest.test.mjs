@@ -12,6 +12,9 @@ test('package.json declares a complete dsh bundle', () => {
   assert.equal(pkg.dsh.manifestVersion, 1)
   assert.equal(pkg.dsh.bundle.patch, './cordis.patch.yml')
   assert.equal(pkg.dsh.client.platform, 'web')
+  // A settings-only client must be injected at boot; without this the module is
+  // deferred and the browser reports the entry as failed.
+  assert.equal(pkg.dsh.client.immediately, true)
   assert.equal(existsSync(join(ROOT, pkg.dsh.bundle.patch)), true)
   assert.equal(pkg.main, 'lib/index.mjs')
   assert.equal(pkg.exports['./client'], './lib/client.js')

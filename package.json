@@ -1,6 +1,6 @@
 {
   "name": "dsh-adapt-packs",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "type": "module",
   "description": "Opt-in adaptation packs for the DSH mobile surface (a host-aware 44px touch floor, icon-button width, width reclaim, floating-widget clearance) plus a compatibility list of third-party plugins on a phone.",
   "license": "MIT",
@@ -67,7 +67,8 @@
       "patch": "./cordis.patch.yml"
     },
     "client": {
-      "platform": "web"
+      "platform": "web",
+      "immediately": true
     }
   }
 }

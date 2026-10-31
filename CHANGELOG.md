@@ -5,6 +5,11 @@
 
 ## [Unreleased]
 
+### Fixed（0.3.3）
+
+- `dsh.client.immediately: true`：只带设置面板的客户端模块必须随 boot 注入。缺这一项时模块会被推迟，浏览器侧把条目判成 `dsh-adapt-packs: failed`（这就是 22:38 那次「服务器拉不起来、插件 fail」的真正原因）。回归测试锁住这个字段。
+- 0.3.2 的 `apply` 兜底保留：拿不到 `settings.section` 时只 warn 不抛，避免整条 bundle 失败。
+
 ### Fixed（0.3.2）
 
 - 设置分区注册失败不再让整条 bundle 判 failed：在缺少 `settings.section` 的 profile（例如只有 `dsh-base + dsh-web-app`）里，`slots.inject` 会抛异常，之前会把 `dsh-adapt-packs: failed` 带进 web boot；现在静默降级（控制台留一条 warn，CLI 不受影响）。补了一条测试。
