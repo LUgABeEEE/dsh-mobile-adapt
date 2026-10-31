@@ -23,6 +23,9 @@
  *                computed box of `.dshm-mainContent` and every control rect.
  *   opt-out     — the panel root carries `data-dsh-adapt="off"`; all measured
  *                values must fall back to the no-pack baseline.
+ *   fixture     — an optional `packs/<id>/fixture.html` replaces the built-in
+ *                fixture for all rounds; when absent the built-in fixture is used
+ *                and the report says so. Contract: docs/收录标准.md §10.
  *
  * `--json` prints one machine-readable object instead of the tables. Any failed
  * assertion exits 1; usage errors exit 2.
@@ -52,6 +55,11 @@ const MANIFEST_FIELDS = Object.freeze(['description', 'id', 'name', 'schemaVersi
 const CSS_LIMIT = 512 * 1024
 const JS_LIMIT = 1024 * 1024
 const MANIFEST_LIMIT = 64 * 1024
+const FIXTURE_LIMIT = 256 * 1024
+const FIXTURE_FILE = 'fixture.html'
+// Required document skeleton for a per-pack fixture; checked in a real browser so
+// a class mentioned only in an inline <style> cannot satisfy it.
+const FIXTURE_REQUIRED_SELECTORS = Object.freeze(['.dshm-shell', '.dshm-main', '.dshm-mainContent', '[data-slot="main"]'])
 
 const ROOT = { 'data-slot': true, role: true }
 
@@ -115,6 +123,7 @@ class PackReport {
     this.ok = true
     this.assertions = []
     this.measurements = {}
+    this.fixture = null
     this.error = null
   }
 
@@ -144,15 +153,16 @@ function inspectStatic(report) {
   const dir = report.directory
   if (existsSync(dir) === false || statSync(dir).isDirectory() === false) {
     report.fail('static', 'static.directory', `包目录不存在：${dir}`)
-    return { css: null, js: null }
+    return { css: null, js: null, fixture: null }
   }
   report.pass('static', 'static.directory', '包目录存在')
 
   inspectManifest(report)
   const css = inspectCss(report)
   const js = inspectJs(report, path.basename(report.directory))
+  const fixture = inspectFixture(report)
   inspectCatalog(report)
-  return { css, js }
+  return { css, js, fixture }
 }
 
 function inspectManifest(report) {
@@ -341,6 +351,105 @@ function inspectJs(report, directoryId) {
     report.fail('static', 'static.js.activate', 'define 缺少 activate 函数')
   }
   return { source, id: staticId }
+}
+
+/**
+ * Per-pack fixture support: `packs/<id>/fixture.html` replaces the built-in
+ * fixture for every round (baseline, pack, opt-out, desktop). This is the static
+ * half — size/markup/no-script/no-external checks. The DOM parse and the required
+ * shell skeleton are verified in a real, offline browser by
+ * `inspectFixtureInBrowser` once one is available.
+ */
+function inspectFixture(report) {
+  const file = path.join(report.directory, FIXTURE_FILE)
+  if (existsSync(file) === false) {
+    report.fixture = { kind: 'builtin', path: null, bytes: null }
+    return null
+  }
+  const relative = path.relative(REPO, file).split(path.sep).join('/')
+  const bytes = readFileSync(file)
+  const info = { kind: 'custom', path: relative, bytes: bytes.byteLength, source: null, loadable: false }
+  report.fixture = { kind: 'custom', path: relative, bytes: bytes.byteLength }
+
+  if (bytes.byteLength === 0) {
+    report.fail('static', 'static.fixture.size', `${FIXTURE_FILE} 是空文件`)
+  } else if (bytes.byteLength > FIXTURE_LIMIT) {
+    report.fail('static', 'static.fixture.size', `${FIXTURE_FILE} 超过 256 KB（${bytes.byteLength} 字节）`)
+  } else {
+    report.pass('static', 'static.fixture.size', `${FIXTURE_FILE} ${bytes.byteLength} 字节（≤ 256 KB）`)
+  }
+
+  const source = bytes.toString('utf8').replace(/^\uFEFF/, '')
+  info.source = source
+  const lowered = source.toLowerCase()
+  const missing = ['<html', '</html>', '<body', '</body>'].filter(token => lowered.includes(token) === false)
+  const hasNul = source.includes('\u0000')
+  if (missing.length > 0) {
+    report.fail('static', 'static.fixture.markup', `${FIXTURE_FILE} 不是完整 HTML 文档：缺少 ${missing.join(' / ')}`)
+  } else if (hasNul === true) {
+    report.fail('static', 'static.fixture.markup', `${FIXTURE_FILE} 含有 NUL 字节`)
+  } else {
+    report.pass('static', 'static.fixture.markup', `${FIXTURE_FILE} 是完整 HTML 文档（<html>/<body> 齐全）`)
+  }
+
+  // A fixture is DOM + inline style only: check-pack injects the pack's own
+  // mobile.css/mobile.js, so a fixture that ships scripts would bypass the
+  // activation shim (and could do anything in an authenticated page).
+  const scriptMatch = source.match(/<(?:script|iframe|object|embed)\b/i)
+  if (scriptMatch !== null) {
+    report.fail('static', 'static.fixture.no-script', `${FIXTURE_FILE} 不得包含 ${scriptMatch[0]}：脚本由 check-pack 注入，fixture 只放 DOM 与内联样式`)
+  } else {
+    report.pass('static', 'static.fixture.no-script', `${FIXTURE_FILE} 不含 <script>/<iframe>/<object>/<embed>`)
+  }
+
+  const external = source.match(/\b(?:src|href)\s*=|@import\b|\burl\s*\(|https?:\/\//i)
+  if (external !== null) {
+    report.fail('static', 'static.fixture.no-external', `${FIXTURE_FILE} 引用了外部资源（${external[0]}）：fixture 必须自包含，不得联网或加载脚本/样式`)
+  } else {
+    report.pass('static', 'static.fixture.no-external', `${FIXTURE_FILE} 不含 src=/href=/@import/url()/http(s) 引用`)
+  }
+
+  info.loadable = scriptMatch === null && external === null && missing.length === 0 && hasNul === false
+  return info
+}
+
+/**
+ * Parse the custom fixture in a real (offline) browser and check the minimal DOM
+ * contract from docs/收录标准.md §11. Runs before the pack is injected, so the
+ * fixture never executes pack code during this step.
+ */
+async function inspectFixtureInBrowser(report, browser, fixture) {
+  if (fixture.loadable === false) {
+    report.skip('static', 'static.fixture.parse', 'fixture 未通过静态安全检查：跳过浏览器解析（不加载可疑内容）')
+    return
+  }
+  let context = null
+  try {
+    context = await browser.newContext({ offline: true })
+    const page = await context.newPage()
+    await page.setContent(fixture.source, { waitUntil: 'load' })
+    const state = await page.evaluate(required => ({
+      tag: document.documentElement === null ? null : document.documentElement.tagName,
+      missing: required.filter(selector => document.querySelector(selector) === null),
+      panelRoot: document.querySelector('[data-slot="main"] > *') !== null,
+    }), FIXTURE_REQUIRED_SELECTORS)
+    if (state.tag === 'HTML') {
+      report.pass('static', 'static.fixture.parse', `${fixture.path} 可被浏览器解析（DOM 已建立）`)
+    } else {
+      report.fail('static', 'static.fixture.parse', `${fixture.path} 无法解析成 HTML 文档（documentElement=${state.tag ?? 'null'}）`)
+    }
+    if (state.missing.length === 0 && state.panelRoot === true) {
+      report.pass('static', 'static.fixture.structure', `定向 fixture 含壳骨架与面板根（${FIXTURE_REQUIRED_SELECTORS.join(' ')}）`)
+    } else {
+      const missing = [...state.missing]
+      if (state.panelRoot === false) missing.push('[data-slot="main"] > *')
+      report.fail('static', 'static.fixture.structure', `定向 fixture 缺少契约要求的元素：${missing.join(' / ')}（见 docs/收录标准.md §11）`)
+    }
+  } catch (error) {
+    report.fail('static', 'static.fixture.parse', `定向 fixture 无法解析：${error instanceof Error ? error.message : String(error)}`)
+  } finally {
+    if (context !== null) await context.close().catch(() => undefined)
+  }
 }
 
 /**
@@ -709,12 +818,23 @@ function measurePage() {
   }
   const panel = document.querySelector('[data-slot="main"] > *')
   const controlSelector = '[data-slot="main"] :is(button, [role="button"], select, input, textarea)'
-  const controls = [...document.querySelectorAll(controlSelector)].filter(visible).map(element => ({
+  const visibleControls = [...document.querySelectorAll(controlSelector)].filter(visible)
+  const controls = visibleControls.map(element => ({
     tag: element.tagName.toLowerCase(),
     role: element.getAttribute('role'),
     ariaLabel: element.getAttribute('aria-label'),
     ...rect(element),
   }))
+  // The built-in fixture uses desktop-first classes; a per-pack fixture only has
+  // to provide generic elements. Prefer the legacy selectors so the existing
+  // numbers stay byte-for-byte identical, then fall back to the first visible
+  // button / field / singleton element in the panel.
+  const isButton = element => element.tagName === 'BUTTON' || element.getAttribute('role') === 'button'
+  const fallbackButton = visibleControls.find(isButton) ?? null
+  const fallbackIconButton = visibleControls.find(element => isButton(element) === true && (element.textContent ?? '').trim() === '') ?? null
+  const fallbackInput = visibleControls.find(element => element.tagName === 'INPUT') ?? null
+  const fallbackSelect = visibleControls.find(element => element.tagName === 'SELECT') ?? null
+  const floaterNode = document.querySelector('.float-widget') ?? document.querySelector('[data-fixture="floater"]')
   const main = document.querySelector('.dshm-main')
   const content = document.querySelector('.dshm-mainContent')
   const contentStyle = content === null ? null : getComputedStyle(content)
@@ -728,16 +848,16 @@ function measurePage() {
     viewport: { width: window.innerWidth, height: window.innerHeight },
     coarse: window.matchMedia('(pointer: coarse)').matches,
     panel: rect(panel),
-    button: rect(document.querySelector('.plugin-btn')),
-    iconButton: rect(document.querySelector('.plugin-iconbtn')),
-    input: rect(document.querySelector('.plugin-input')),
-    select: rect(document.querySelector('.plugin-select')),
+    button: rect(document.querySelector('.plugin-btn') ?? fallbackButton),
+    iconButton: rect(document.querySelector('.plugin-iconbtn') ?? fallbackIconButton),
+    input: rect(document.querySelector('.plugin-input') ?? fallbackInput),
+    select: rect(document.querySelector('.plugin-select') ?? fallbackSelect),
     panelNavButton: rect(document.querySelector('.dshm-panelNav button')),
     sidebarButtons,
     drawer: rect(document.querySelector('.dshm-drawer')),
     controls,
     panelState: main === null ? null : main.getAttribute('data-dsh-panel'),
-    floater: rect(document.querySelector('.float-widget')),
+    floater: rect(floaterNode),
     floatersVar: getComputedStyle(document.documentElement).getPropertyValue('--dshm-floaters').trim(),
     floatersFlag: document.documentElement.getAttribute('data-dsh-floaters'),
     panelMarginBottom: panel === null ? null : getComputedStyle(panel).marginBottom,
@@ -753,7 +873,8 @@ function measurePage() {
 }
 
 async function runFixture(browser, options) {
-  const { device, pack, optOut } = options
+  const { device, pack, optOut, fixture } = options
+  const custom = fixture !== null && fixture !== undefined && fixture.kind === 'custom'
   const viewport = device === 'mobile' ? MOBILE_VIEWPORT : DESKTOP_VIEWPORT
   const context = await browser.newContext({
     viewport,
@@ -764,7 +885,17 @@ async function runFixture(browser, options) {
   const errors = []
   try {
     const page = await context.newPage()
-    await page.setContent(FIXTURE(optOut), { waitUntil: 'load' })
+    await page.setContent(custom === true ? fixture.source : FIXTURE(optOut), { waitUntil: 'load' })
+    // The built-in fixture bakes the opt-out marker into its markup; a per-pack
+    // fixture stays generic, so the checker applies the documented opt-out itself
+    // (document root + panel root) before the pack's CSS/JS is injected.
+    if (custom === true && optOut === true) {
+      await page.evaluate(() => {
+        document.documentElement.setAttribute('data-dsh-adapt', 'off')
+        const panelRoot = document.querySelector('[data-slot="main"] > *')
+        if (panelRoot !== null) panelRoot.setAttribute('data-dsh-adapt', 'off')
+      })
+    }
 
     if (pack !== null && pack.css !== null) {
       try {
@@ -816,7 +947,7 @@ async function runFixture(browser, options) {
         content.scrollTop = content.scrollHeight
         return new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => {
           const panel = document.querySelector('[data-slot="main"] > *')
-          const floater = document.querySelector('.float-widget')
+          const floater = document.querySelector('.float-widget') ?? document.querySelector('[data-fixture="floater"]')
           resolve({
             contentScrollTop: Math.round(content.scrollTop),
             contentScrollable: content.scrollHeight > content.clientHeight + 1,
@@ -877,33 +1008,53 @@ function checkDefinition(report, layer, fixture, packId) {
   }
 }
 
-function validateBaseline(report, fixture, device) {
+function validateBaseline(report, fixture, device, fixtureInfo) {
   const metrics = fixture.metrics
   const viewport = device === 'mobile' ? MOBILE_VIEWPORT : DESKTOP_VIEWPORT
   const label = `${viewport.width}×${viewport.height}`
+  const custom = fixtureInfo !== null && fixtureInfo !== undefined && fixtureInfo.kind === 'custom'
+  const openRows = fixture.openMetrics?.sidebarButtons ?? []
   const failures = []
   if (metrics.viewport.width !== viewport.width || metrics.viewport.height !== viewport.height) {
     failures.push(`视口是 ${metrics.viewport.width}×${metrics.viewport.height}，期望 ${viewport.width}×${viewport.height}`)
   }
   if (device === 'mobile' && metrics.coarse !== true) failures.push('粗指针环境没有生效（(pointer: coarse) 为 false）')
   if (device === 'desktop' && metrics.coarse !== false) failures.push('精指针环境没有生效（(pointer: coarse) 为 true）')
-  if (metrics.button === null || metrics.button.height > 30) failures.push(`基线按钮高度 ${fmt(metrics.button?.height)}，期望桌面优先的 28px`)
-  if (metrics.input === null || metrics.input.height > 34) failures.push(`基线输入高度 ${fmt(metrics.input?.height)}，期望桌面优先的 32px`)
-  if (metrics.panel === null || metrics.panel.left > 1) failures.push(`基线面板左缘 ${fmt(metrics.panel?.left)}，期望 0`)
-  // Shell chrome must start below the floor too, otherwise a shell pack would
-  // "pass" without having changed anything.
-  if (metrics.panelNavButton === null || metrics.panelNavButton.height > 32) {
-    failures.push(`基线返回栏按钮高度 ${fmt(metrics.panelNavButton?.height)}，期望桌面优先的 28px`)
-  }
-  const openRows = fixture.openMetrics?.sidebarButtons ?? []
-  if (openRows.length === 0) {
-    failures.push('抽屉展开后没有可测的侧栏按钮')
-  } else if (openRows.some(row => row.height > 32)) {
-    failures.push(`基线抽屉侧栏按钮高度 ${fmt(openRows[0].height)}，期望桌面优先的 28px`)
+  if (custom === true) {
+    // A per-pack fixture does not have to mimic the built-in desktop-first pixel
+    // values, but it must expose the DOM the declared capabilities are asserted
+    // against — otherwise the runtime layer would "pass" with nothing to measure.
+    if (metrics.panel === null) failures.push('定向 fixture 里没有面板根（[data-slot="main"] > *）')
+    if (metrics.controls.length === 0) failures.push('定向 fixture 里没有可测控件（[data-slot="main"] 内的 button/select/input/textarea）')
+    if (covers(report, 'shell-hit-target')) {
+      if (metrics.panelNavButton === null) failures.push('定向 fixture 缺少 .dshm-panelNav button（pack 声明了 shell-hit-target）')
+      if (openRows.length === 0) failures.push('定向 fixture 缺少展开抽屉侧栏按钮（pack 声明了 shell-hit-target）')
+    }
+    if (covers(report, 'floater-clearance') && metrics.floater === null) {
+      failures.push('定向 fixture 缺少浮动控件（加 [data-fixture="floater"]，pack 声明了 floater-clearance）')
+    }
+  } else {
+    if (metrics.button === null || metrics.button.height > 30) failures.push(`基线按钮高度 ${fmt(metrics.button?.height)}，期望桌面优先的 28px`)
+    if (metrics.input === null || metrics.input.height > 34) failures.push(`基线输入高度 ${fmt(metrics.input?.height)}，期望桌面优先的 32px`)
+    if (metrics.panel === null || metrics.panel.left > 1) failures.push(`基线面板左缘 ${fmt(metrics.panel?.left)}，期望 0`)
+    // Shell chrome must start below the floor too, otherwise a shell pack would
+    // "pass" without having changed anything.
+    if (metrics.panelNavButton === null || metrics.panelNavButton.height > 32) {
+      failures.push(`基线返回栏按钮高度 ${fmt(metrics.panelNavButton?.height)}，期望桌面优先的 28px`)
+    }
+    if (openRows.length === 0) {
+      failures.push('抽屉展开后没有可测的侧栏按钮')
+    } else if (openRows.some(row => row.height > 32)) {
+      failures.push(`基线抽屉侧栏按钮高度 ${fmt(openRows[0].height)}，期望桌面优先的 28px`)
+    }
   }
   for (const failure of failures) report.fail('runtime', `runtime.${device}.fixture`, `${label} fixture 基线不成立：${failure}`)
   if (failures.length === 0) {
-    report.pass('runtime', `runtime.${device}.fixture`, `${label} fixture 基线成立（按钮 ${fmt(metrics.button.height)} / 输入 ${fmt(metrics.input.height)} / 面板左缘 ${fmt(metrics.panel.left)} / 返回栏 ${fmt(metrics.panelNavButton?.height)} / 抽屉行 ${fmt(openRows[0]?.height)}）`)
+    if (custom === true) {
+      report.pass('runtime', `runtime.${device}.fixture`, `${label} 定向 fixture 基线成立（${fixtureInfo.path}：面板左缘 ${fmt(metrics.panel?.left)} / 控件 ${metrics.controls.length} 个 / 抽屉行 ${fmt(openRows[0]?.height)}）`)
+    } else {
+      report.pass('runtime', `runtime.${device}.fixture`, `${label} fixture 基线成立（按钮 ${fmt(metrics.button.height)} / 输入 ${fmt(metrics.input.height)} / 面板左缘 ${fmt(metrics.panel.left)} / 返回栏 ${fmt(metrics.panelNavButton?.height)} / 抽屉行 ${fmt(openRows[0]?.height)}）`)
+    }
   }
   return failures.length === 0
 }
@@ -1084,7 +1235,12 @@ function checkOptOut(report, baseline, optOut) {
   const layer = 'runtime'
   const failures = []
   const compare = (label, actual, expected) => {
-    if (actual === null || expected === null || near(actual, expected) === false) {
+    // A targeted fixture may legitimately omit an element the built-in fixture has
+    // (e.g. no svg-only icon button). "absent on both sides" is not a regression;
+    // "changed" or "present on one side only" still fails.
+    const absent = value => value === null || value === undefined
+    if (absent(actual) === true && absent(expected) === true) return
+    if (absent(actual) === true || absent(expected) === true || near(actual, expected) === false) {
       failures.push(`${label} ${fmt(actual)} ≠ 基线 ${fmt(expected)}`)
     }
   }
@@ -1113,7 +1269,11 @@ function checkDesktop(report, baseline, after, strict) {
   const layer = 'runtime'
   const failures = []
   const compare = (label, actual, expected) => {
-    if (actual === null || expected === null || near(actual, expected) === false) {
+    // Elements absent from a targeted fixture must be absent on both sides; the
+    // built-in fixture always has them, so its behaviour is unchanged.
+    const absent = value => value === null || value === undefined
+    if (absent(actual) === true && absent(expected) === true) return
+    if (absent(actual) === true || absent(expected) === true || near(actual, expected) === false) {
       failures.push(`${label} ${fmt(actual)} ≠ ${fmt(expected)}`)
     }
   }
@@ -1208,24 +1368,32 @@ async function checkPack(browser, pathArgument, skip, options) {
     return report
   }
   const staticData = inspectStatic(report)
+  const fixtureInfo = staticData.fixture
   // A missing or broken manifest still runs the runtime layers, so the author
-  // sees every layer in one run instead of one error at a time.
+  // sees every layer in one run instead of one error at a time. A custom fixture
+  // that failed the static safety checks is different: never load it (or the
+  // pack) at runtime, or a fixture script would bypass the activation shim.
+  if (fixtureInfo !== null) await inspectFixtureInBrowser(report, browser, fixtureInfo)
+  if (fixtureInfo !== null && fixtureInfo.loadable === false) {
+    report.skip('runtime', 'runtime.skipped', '定向 fixture 未通过静态安全检查：跳过全部运行时断言（不加载 fixture 或 pack 脚本）')
+    return report
+  }
 
   let baselineMetrics = null
   try {
-    const baselineMobile = await runFixture(browser, { device: 'mobile', pack: null, optOut: false })
-    const baselineDesktop = await runFixture(browser, { device: 'desktop', pack: null, optOut: false })
+    const baselineMobile = await runFixture(browser, { device: 'mobile', pack: null, optOut: false, fixture: fixtureInfo })
+    const baselineDesktop = await runFixture(browser, { device: 'desktop', pack: null, optOut: false, fixture: fixtureInfo })
     baselineMetrics = {
       mobile: baselineMobile.metrics,
       desktop: baselineDesktop.metrics,
     }
-    validateBaseline(report, baselineMobile, 'mobile')
-    validateBaseline(report, baselineDesktop, 'desktop')
+    validateBaseline(report, baselineMobile, 'mobile', fixtureInfo)
+    validateBaseline(report, baselineDesktop, 'desktop', fixtureInfo)
 
     const pack = { css: staticData.css, js: staticData.js === null ? null : staticData.js.source }
-    const mobile = await runFixture(browser, { device: 'mobile', pack, optOut: false })
-    const optOut = await runFixture(browser, { device: 'mobile', pack, optOut: true })
-    const desktop = await runFixture(browser, { device: 'desktop', pack, optOut: false })
+    const mobile = await runFixture(browser, { device: 'mobile', pack, optOut: false, fixture: fixtureInfo })
+    const optOut = await runFixture(browser, { device: 'mobile', pack, optOut: true, fixture: fixtureInfo })
+    const desktop = await runFixture(browser, { device: 'desktop', pack, optOut: false, fixture: fixtureInfo })
 
     report.measurements = {
       mobile: { baseline: baselineMetrics.mobile, pack: mobile.metrics, optOut: optOut.metrics },
@@ -1253,6 +1421,7 @@ function usage() {
     '用法：node tools/check-pack.mjs [packs/<id> ...] [--json] [--desktop]',
     '',
     '  packs/<id>   要校验的包目录（可多个；缺省校验 packs/ 下全部非下划线目录）',
+    '  packs/<id>/fixture.html  可选：存在时替代内置 fixture（见 docs/收录标准.md §11）',
     '  --json       输出机器可读 JSON（stdout 只有 JSON）',
     '  --desktop    额外断言桌面严格零回归（mainContent 盒模型与全部控件矩形）',
   ].join('\n')
@@ -1262,6 +1431,11 @@ function writeHuman(report) {
   const lines = []
   const counts = report.counts()
   lines.push(`pack ${report.relative}（id ${report.id}）`)
+  if (report.fixture !== null) {
+    lines.push(report.fixture.kind === 'custom'
+      ? `fixture：定向 ${report.fixture.path}（${report.fixture.bytes} 字节）`
+      : 'fixture：内置（未提供 packs/<id>/fixture.html，回退内置 fixture）')
+  }
   const order = ['static', 'runtime']
   for (const layer of order) {
     const entries = report.assertions.filter(entry => entry.layer === layer)
@@ -1393,6 +1567,7 @@ function serialize(report) {
   return {
     id: report.id,
     path: report.relative,
+    fixture: report.fixture,
     ok: report.ok,
     error: report.error,
     counts: report.counts(),
