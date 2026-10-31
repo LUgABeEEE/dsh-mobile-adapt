@@ -1,65 +1,78 @@
-/* core-panel · 第三方插件面板的手机下限
+/* core-panel · 第三方插件面板的手机下限（release / main 两条线）
  *
- * 只做三件插件面板自己保证不了的事（不点名任何插件、不重绘视觉）：
- *   1. 粗指针下插件面板内的命中下限（44px）；
- *   2. ≤720px 上面板让开折叠的 56px 图标轨道（加在 .dshm-mainContent 的
- *      padding-left 上，不是插件根 margin——`width:100%` 的插件根加 margin
- *      会变成 100%+56，右边被 overflow:hidden 裁掉）；
- *   3. 面板页底部让出 env(safe-area-inset-bottom)。
+ * 只做插件面板自己保证不了、宿主也不一定给的事（不点名任何插件、不重绘视觉）：
+ *   A. 粗指针下插件面板内的命中高度下限（44px）——**只在宿主没有自带地板时**；
+ *   B. svg-only 图标按钮的宽度下限（44px）——宿主不提供，两条线上都生效；
+ *   C. ≤720px 上把 `width:100vw` / 固定像素宽的插件根收回剩余宽度——宿主不覆盖时；
+ *   D. 面板页底部让出 env(safe-area-inset-bottom)。
  *
- * 面板状态只认 [data-dsh-panel="1"]：由 mobile.js 用 MutationObserver + rAF
- * 写在外壳 .dshm-main 上，不依赖 :has()（部分 WebView 没有这个选择器）。
+ * 版本门阀（本包唯一的版本判断，纯 CSS）：
+ *   dsh-mobile 从 #319（main 6c50b13，2026-10-31 合入）起由宿主自己在 `.dshm-main`
+ *   上写 `data-dsh-panel="1|0"`，并给面板内的 button/[role=button]/select/input/textarea
+ *   44px 高度地板、给面板根 `max-width:100%;box-sizing:border-box`、让主区可滚。
+ *   所以 A 与 C 用 `.dshm-main:not([data-dsh-panel])` 作门阀：宿主一旦写这个属性，
+ *   同效果的部分就退让（不抢写、不重复叠加）；宿主没写（0.8.0 及更早的发布线）时
+ *   本包顶上。B 没有等价宿主规则，因此不设门阀。
+ *
+ * 面板状态只认本包自己的 [data-dshm-adapt-panel="1"]：由 mobile.js 用
+ * MutationObserver + rAF 写在外壳 `.dshm-main` 上，不依赖 :has()（部分 WebView
+ * 没有这个选择器），**也不写宿主的 data-dsh-panel**（那是宿主的状态）。
  * opt-out 也在 mobile.js 里处理：主槽子树或外壳祖先带 [data-dsh-adapt="off"] 时
- * shim 写 data-dsh-panel="0"，下面所有规则自然不命中。
+ * shim 写 data-dshm-adapt-panel="0"，下面所有规则自然不命中。
  *
  * 数值用 !important：这是宿主下限，不是建议值（与 dsh-mobile 自己对输入框
- * 字号用 !important 的理由相同）。代价见 README「代价与边界」。
+ * 字号用 !important 的理由相同）。它只出现在「宿主没写 data-dsh-panel」的分支里，
+ * 所以不会覆盖 #319 及以后宿主的实现。代价见 README「代价与边界」。
  */
 
-/* 1. 命中下限。只作用于主槽（[data-slot="main"]）内的控件，宿主外壳自己的
- *    返回栏/抽屉不在范围内——那是 dsh-mobile 自己的密度，不该被这张包改。 */
 @media (pointer: coarse) {
-  .dshm-main[data-dsh-panel="1"] [data-slot="main"] :where(button, [role="button"], select) {
+  /* A. 高度下限（release ≤0.8.x 的兜底）。只作用于主槽（[data-slot="main"]）内的
+   *    控件，宿主外壳自己的返回栏/抽屉不在范围内——那是 dsh-mobile 自己的密度。 */
+  .dshm-main:not([data-dsh-panel])[data-dshm-adapt-panel="1"] [data-slot="main"] :where(button, [role="button"], select) {
     min-height: 44px !important;
   }
 
-  /* svg-only 图标按钮没有文字撑宽，只加高度仍是 28px 宽：宽度也要兜住。
-   * 开关/勾选例外：它们靠视觉表达状态，撑成 44×44 会变成大方块压在行上。 */
-  .dshm-main[data-dsh-panel="1"] [data-slot="main"] :where(button, [role="button"]):not([role="switch"]):not([role="checkbox"]) {
-    min-width: 44px !important;
+  .dshm-main:not([data-dsh-panel])[data-dshm-adapt-panel="1"] [data-slot="main"] :where(input:not([type="checkbox"]):not([type="radio"]), textarea) {
+    min-height: 44px !important;
   }
 
-  /* 开关/勾选：视觉复位。只撤掉本包加上的下限，视觉盒保持插件
-   * 自己的尺寸；命中区交给控件自己的 label / 外层可点区域。这是「宿主下限」
-   * 的一次显式例外——不用伪元素硬扩，是为了不覆盖开关自己的 ::before/::after
-   * （轨道/旋钮）。 */
-  .dshm-main[data-dsh-panel="1"] [data-slot="main"] :is([role="switch"], [role="checkbox"]) {
+  /* 开关/勾选：视觉复位。只撤掉本包加上的下限，视觉盒保持插件自己的尺寸；
+   * 命中区交给控件自己的 label / 外层可点区域。这是「宿主下限」的一次显式例外——
+   * 不用伪元素硬扩，是为了不覆盖开关自己的 ::before/::after（轨道/旋钮）。
+   * 与 A 同门阀：#319 起宿主的 44px 只作用于 button/[role=button]/select，不碰
+   * [role=switch]/[role=checkbox]，本包也不该在宿主线上替它做决定。 */
+  .dshm-main:not([data-dsh-panel])[data-dshm-adapt-panel="1"] [data-slot="main"] :is([role="switch"], [role="checkbox"]) {
     min-height: 0 !important;
     min-width: 0 !important;
   }
 
-  .dshm-main[data-dsh-panel="1"] [data-slot="main"] :where(input:not([type="checkbox"]):not([type="radio"]), textarea) {
-    min-height: 44px !important;
+  /* 去掉 300ms 双击缩放等待，让 44px 的控件按手指预期响应。 */
+  .dshm-main:not([data-dsh-panel])[data-dshm-adapt-panel="1"] [data-slot="main"] :where(button, [role="button"], a) {
+    touch-action: manipulation;
   }
 
-  /* 去掉 300ms 双击缩放等待，让 44px 的控件按手指预期响应。 */
-  .dshm-main[data-dsh-panel="1"] [data-slot="main"] :where(button, [role="button"], a) {
-    touch-action: manipulation;
+  /* B. 宽度下限。svg-only 图标按钮没有文字撑宽，只加高度仍是 28px 宽：宽度也要
+   *    兜住。宿主（含 #319）只给高度，所以这条在两条发布线上都保留——它是本包
+   *    与宿主不重复的贡献。开关/勾选例外同上。 */
+  .dshm-main[data-dshm-adapt-panel="1"] [data-slot="main"] :where(button, [role="button"]):not([role="switch"]):not([role="checkbox"]) {
+    min-width: 44px !important;
   }
 }
 
-/* 2 + 3. 窄屏让位与底部安全区。让位量由 mobile.js 实测折叠轨道宽度后写成
- *    --dshm-rail（0–64px；轨道不可见或抽屉展开时为 0），默认 56px。 */
+/* C + D. 窄屏宽度回收与底部安全区。 */
 @media (max-width: 720px) {
-  .dshm-main[data-dsh-panel="1"] .dshm-mainContent {
-    padding-left: var(--dshm-rail, 56px);
-    padding-bottom: env(safe-area-inset-bottom, 0px);
-  }
-
-  /* 让位后插件根不能比剩余宽度更宽：`width:100vw` / 固定像素宽的根都收回来。
-   * 只作用于主槽根节点，不动后代——插件内部的宽表仍可按自己的规则滚动。 */
-  .dshm-main[data-dsh-panel="1"] [data-slot="main"] > * {
+  /* C. 宿主不给宽时，插件根不能比剩余宽度更宽：`width:100vw` / 固定像素宽的根都
+   *    收回来。只作用于主槽根节点，不动后代——插件内部的宽表仍可按自己的规则滚动。
+   *    #319 起宿主已写等价规则（`[data-slot="main"]>*{max-width:100%;
+   *    box-sizing:border-box}`），故同样以 data-dsh-panel 为门阀退让。 */
+  .dshm-main:not([data-dsh-panel])[data-dshm-adapt-panel="1"] [data-slot="main"] > * {
     max-width: 100%;
     box-sizing: border-box;
+  }
+
+  /* D. 底部安全区。宿主不提供这一条；headless 里 env(safe-area-inset-bottom)=0，
+   *    真机才有数值——仍未在真机量过（见 README「代价与边界」）。 */
+  .dshm-main[data-dshm-adapt-panel="1"] .dshm-mainContent {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
   }
 }

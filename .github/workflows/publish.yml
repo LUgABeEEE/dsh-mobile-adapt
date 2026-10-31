@@ -1,0 +1,62 @@
+# Publish dsh-adapt-packs to the npm registry.
+#
+# Trigger: a version tag (v0.1.0, v0.2.0, …). The tag must match package.json.
+# workflow_dispatch runs a --dry-run by default so the pipeline can be exercised
+# without touching the registry.
+#
+# Requires the repository secret NPM_TOKEN: a granular access token with
+# "Read and write" publish permission for dsh-adapt-packs (Automation tokens
+# also work). Provenance is signed through GitHub OIDC, so no other secret is
+# needed.
+name: publish
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "npm publish --dry-run instead of publishing"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  id-token: write # npm provenance (OIDC)
+
+jobs:
+  publish:
+    name: npm publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: The tag must match package.json
+        if: github.event_name == 'push'
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          version="$(node -p "require('./package.json').version")"
+          if [ "$tag" != "$version" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match package.json version $version"
+            exit 1
+          fi
+          echo "publishing $version"
+
+      # No dependencies: the catalog check is the gate, and it also runs again as
+      # prepublishOnly during npm publish.
+      - run: node tools/cli.mjs list
+
+      - name: Publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.dry_run }}" = "true" ]; then
+            npm publish --provenance --access public --dry-run
+          else
+            npm publish --provenance --access public
+          fi

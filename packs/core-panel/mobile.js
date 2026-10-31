@@ -1,13 +1,18 @@
 /* core-panel · mobile.js
  *
  * 扩展运行时负责注入 mobile.css（<style data-plugin-id>），这里只做宿主替不了的事：
- * 把「面板是否打开」变成外壳上的 data-dsh-panel="1|0"，并实测折叠轨道的宽度写成
- * --dshm-rail，让 CSS 能按状态生效而不依赖 :has()。
+ * 把「面板是否打开」变成外壳上的 **本包自有** 属性 data-dshm-adapt-panel="1|0"，
+ * 让 CSS 能按状态生效而不依赖 :has()。
+ *
+ * 为什么不写宿主的 data-dsh-panel：dsh-mobile #319（main 6c50b13）起由宿主自己在
+ * `.dshm-main` 上写这个属性，表达同一个「面板打开」状态。两个写入方抢同一个属性时
+ * 后写的那一方会覆盖另一方；本包改用自有名字，宿主的状态归宿主，本包只读它
+ * （CSS 的版本门阀 `.dshm-main:not([data-dsh-panel])` 就是「宿主已接管」的信号）。
  *
  * opt-out：主槽 `[data-slot="main"]` 的子树里出现 data-dsh-adapt="off"（面板常被
  * 包一层，也可能一次渲染多个根），或主槽/外壳祖先带 off 时，这个 shim 直接写
- * data-dsh-panel="0"（而不是让 CSS 再写一套重置规则）。这样「面板状态」只有一个
- * 开关，CSS 与 opt-out 不可能各说各话。
+ * data-dshm-adapt-panel="0"（而不是让 CSS 再写一套重置规则）。这样「本包的面板状态」
+ * 只有一个开关，CSS 与 opt-out 不可能各说各话。
  *
  * 幂等：activate 不创建任何 <style> 节点（CSS 由宿主注入）；重复 activate 会先
  * 执行上一代的 cleanup，再安装新的 observer 与 rAF 串，不会叠加第二份监听。
@@ -15,24 +20,8 @@
 (function () {
   if (typeof window === 'undefined' || typeof document === 'undefined') return
 
-  var STATE_ATTR = 'data-dsh-panel'
-  var RAIL_PROP = '--dshm-rail'
+  var STATE_ATTR = 'data-dshm-adapt-panel'
   var CLEANUP_KEY = '__dshMobileCorePanelCleanup'
-  var RAIL_MAX = 64
-
-  /* 折叠轨道是 fixed 覆盖层；抽屉展开时是覆盖层动画，不产生让位。
-   * 用实测宽度而不是写死 56：轨道被隐藏或换尺寸时面板不会凭空留白。 */
-  function measureRail(doc, win) {
-    var drawer = doc.querySelector('.dshm-drawer')
-    if (drawer === null) return 0
-    if (drawer.getAttribute('data-open') === 'true') return 0
-    var style = win.getComputedStyle(drawer)
-    if (style.display === 'none' || style.visibility === 'hidden') return 0
-    var box = drawer.getBoundingClientRect()
-    var width = Math.round(box.width)
-    if (width <= 0) return 0
-    return Math.min(width, RAIL_MAX)
-  }
 
   /* opt-out 对整个主槽子树求值：插件可能把面板包一层，也可能一次渲染多个根，
    * 只认「第一个直接子元素」会让 off 静默失效。只要子树里出现 data-dsh-adapt="off"
@@ -69,8 +58,6 @@
       var record = {
         pane: pane,
         state: pane.getAttribute(STATE_ATTR),
-        rail: pane.style.getPropertyValue(RAIL_PROP),
-        railPriority: pane.style.getPropertyPriority(RAIL_PROP),
       }
       records.push(record)
       return record
@@ -86,8 +73,6 @@
         var hasNav = pane.querySelector('.dshm-panelNav') !== null || pane.querySelector('.dshm-panelBack') !== null
         var next = hasNav === true && optedOut === false ? '1' : '0'
         if (pane.getAttribute(STATE_ATTR) !== next) pane.setAttribute(STATE_ATTR, next)
-        var rail = optedOut === true ? 0 : measureRail(doc, win)
-        pane.style.setProperty(RAIL_PROP, rail + 'px')
       }
     }
 
@@ -132,13 +117,6 @@
       })
     }
 
-    var drawerObserver = null
-    var drawer = doc.querySelector('.dshm-drawer')
-    if (drawer !== null && typeof win.MutationObserver === 'function') {
-      drawerObserver = new win.MutationObserver(schedule)
-      drawerObserver.observe(drawer, { attributes: true, attributeFilter: ['data-open', 'style', 'class'] })
-    }
-
     win.addEventListener('resize', schedule)
 
     function cleanup() {
@@ -146,7 +124,6 @@
       disposed = true
       cancel()
       if (observer !== null) observer.disconnect()
-      if (drawerObserver !== null) drawerObserver.disconnect()
       win.removeEventListener('resize', schedule)
       if (api !== null && api !== undefined && api.signal !== null && api.signal !== undefined && typeof api.signal.removeEventListener === 'function') {
         api.signal.removeEventListener('abort', cleanup)
@@ -155,8 +132,6 @@
         var record = records[index]
         if (record.state === null) record.pane.removeAttribute(STATE_ATTR)
         else record.pane.setAttribute(STATE_ATTR, record.state)
-        if (record.rail === '') record.pane.style.removeProperty(RAIL_PROP)
-        else record.pane.style.setProperty(RAIL_PROP, record.rail, record.railPriority)
       }
       records.length = 0
       if (win[CLEANUP_KEY] === cleanup) {

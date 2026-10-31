@@ -1,25 +1,37 @@
 /* shell-chrome — 外壳自己的触控下限（返回栏 / 抽屉侧栏）
  *
- * 为什么单独一张包：`core-panel` 只管插件面板里面的东西，面板状态（data-dsh-panel）
- * 不够用 —— 返回栏和抽屉在「没有打开任何插件面板」时也在屏幕上，用户照样要按。
- * 这两处是 dsh-mobile 外壳自己的按钮，尺寸由外壳决定（返回栏 28px、抽屉行 28px），
- * 插件没法替它调；所以按「外壳级」收录，用粗指针作为唯一开关。
+ * 为什么单独一张包：`core-panel` 只管插件面板里面的东西，本包管的是外壳自己的
+ * 按钮 —— 返回栏和抽屉在「没有打开任何插件面板」时也在屏幕上，用户照样要按。
+ *
+ * 两条规则的强度不一样，这是 2026-10-31 的 0.8.0 实测结论（见 README 与
+ * 实测-0.8.0-20261031.md）：
+ *
+ *   1. 抽屉行（展开态）36px → 44px：仍然有效。宿主 0.8.0 没有给侧栏行触控下限，
+ *      所以这条用 `!important`（宿主下限的语义，见 README「代价」）。
+ *
+ *   2. 返回栏按钮：0.8.0 的 `.dshm-panelBack` 已经是 `min-width/min-height:48px`
+ *      （dsh-mobile 0.8.0 lib/mobile-layout.js:449）。原先那条 `44px !important`
+ *      会把宿主更大的值**压小**（实测 48 → 44、panelNav 57 → 56），属于负收益。
+ *      现在改成 **rise-only**：选择器整体放进 `:where()`（特异性 0），且不用
+ *      `!important`，于是
+ *        - 宿主自己写了 min-height（0.8.0 = 48px）→ 宿主赢，数值不变；
+ *        - 宿主只给 height 或什么都没有（更早/未来可能回归的构建）→ 本包把
+ *          命中高度抬到 44px（min-height 不会被 height 抵消）。
+ *      这不是「删除」，是「只在宿主没给时兜底」——和 core-panel 的版本门阀同思路。
  *
  * 只抬命中区，不改视觉：这里没有配色、没有间距重排，只加 min-height / min-width。
  *
  * opt-out：外壳级开关写在文档根上（`<html data-dsh-adapt="off">`），整页回到原尺寸。
  * 面板级的那种「只有某个插件面板例外」不适用于这里 —— 它管的就是外壳本身。
- *
- * 数值用 !important：这是宿主下限，不是建议值。dsh-mobile 自己的输入框字号规则
- * 用的是同一套逻辑；代价是插件若刻意做紧凑行，会被这条压过（见 README §4）。
  */
 
 @media (pointer: coarse) {
-  /* 1. 面板顶部「返回会话」栏。按钮可能是纯文字、可能是图标 + 文字，
-   *    也可能是只有 svg 的图标按钮，所以宽高都要给下限。 */
-  :root:not([data-dsh-adapt="off"]) .dshm-panelNav :where(button, [role="button"]) {
-    min-height: 44px !important;
-    min-width: 44px !important;
+  /* 1. 面板顶部「返回会话」栏。按钮可能是纯文字、可能是图标 + 文字，也可能是
+   *    只有 svg 的图标按钮，所以宽高都要给下限。特异性 0 + 非 !important：
+   *    任何宿主自己的 min-height/min-width 都优先（见文件头第 2 条）。 */
+  :where(:root:not([data-dsh-adapt="off"]) .dshm-panelNav) :where(button, [role="button"]) {
+    min-height: 44px;
+    min-width: 44px;
   }
 
   /* 2. 抽屉展开时是拇指面，不是悬停轨道。折叠态（56px 图标轨）不动 ——

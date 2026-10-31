@@ -8,15 +8,21 @@
  * Layers:
  *   1. static  — extension.json carries exactly the five runtime fields and its
  *                id equals the directory name; every selector in mobile.css is
- *                scoped to `[data-dsh-panel="1"]`, `(pointer: coarse)` or
- *                `[data-dsh-adapt="off"]`, and names no third-party plugin; the
- *                mobile.js script calls `window.dshMobile.define` with the same
- *                id and apiVersion 1.
+ *                scoped to the panel state (`[data-dsh-panel="1"]` for the host's
+ *                own state, `[data-dshm-adapt-panel="1"]` for a pack's own state),
+ *                `(pointer: coarse)` or `[data-dsh-adapt="off"]`, and names no
+ *                third-party plugin; the mobile.js script calls
+ *                `window.dshMobile.define` with the same id and apiVersion 1.
  *   2. runtime — a fixture that reproduces the phone shell's DOM, wrapped around
  *                a deliberately desktop-first panel (28px buttons, 32px inputs,
  *                a full-width root). At 390×844 with a coarse pointer the pack's
- *                mobile.css then mobile.js run; the panel must reach a 44px hit
- *                floor and clear the 56px rail without overflowing 390px.
+ *                mobile.css then mobile.js run; the panel controls must reach a
+ *                44px hit floor and the page must not overflow 390px.
+ *   host state  — when a pack gates rules on the host's own `data-dsh-panel`
+ *                (the dsh-mobile #319 contract), the harness also simulates a host
+ *                that already owns that attribute: the gated rules must back off,
+ *                the host attribute must stay untouched, and whatever the pack
+ *                keeps on both release lines (e.g. `min-width`) must still apply.
  *   3. desktop — the same fixture at 1280×800 with a fine pointer. The three
  *                rules must move nothing: every measured value equals the
  *                no-pack baseline. `--desktop` adds strict parity of the
@@ -99,7 +105,6 @@ const PACKS_DIR_REAL = onDiskPath(PACKS_DIR)
 const MOBILE_VIEWPORT = Object.freeze({ width: 390, height: 844 })
 const DESKTOP_VIEWPORT = Object.freeze({ width: 1280, height: 800 })
 const HIT_TARGET = 44
-const RAIL_WIDTH = 56
 const EPSILON = 0.5
 
 const PACK_ID_RE = /^[a-z][a-z0-9-]{0,63}$/
@@ -329,7 +334,7 @@ function inspectCss(report) {
       const scope = selectorScope(rule, selector)
       if (scope === null) {
         scopeFailures += 1
-        report.fail('static', 'static.css.scope', `第 ${rule.line} 行选择器不在 [data-dsh-panel="1"] / (pointer: coarse) / [data-dsh-adapt="off"] 作用域内：${selector}`, { selector })
+        report.fail('static', 'static.css.scope', `第 ${rule.line} 行选择器不在 [data-dsh-panel] / [data-dshm-adapt-panel="1"] / (pointer: coarse) / [data-dsh-adapt="off"] 作用域内：${selector}`, { selector })
       }
     }
   }
@@ -342,6 +347,13 @@ function inspectCss(report) {
   }
   if (hashFailures === 0) {
     report.pass('static', 'static.css.has', '没有使用 :has()')
+  }
+  // A pack may gate rules on the host's own panel state (dsh-mobile #319 writes
+  // `data-dsh-panel` on the main pane). When it does, the runtime layer simulates
+  // that host and proves the gated rules back off instead of duplicating the host.
+  report.hostGate = /:not\(\s*\[\s*data-dsh-panel\s*\]\s*\)/.test(source)
+  if (report.hostGate === true) {
+    report.pass('static', 'static.css.hostGate', '用 :not([data-dsh-panel]) 作宿主门阀：宿主接管面板状态时对应规则退让')
   }
   return source
 }
@@ -692,7 +704,11 @@ function splitSelectors(selector) {
 }
 
 function selectorScope(rule, selector) {
-  if (/\[\s*data-dsh-panel\s*=\s*(?:"1"|'1'|1)\s*\]/.test(selector)) return 'panel'
+  // The host's own panel-state attribute (dsh-mobile #319). Presence is enough:
+  // a gate such as `:not([data-dsh-panel])` must count as panel-scoped.
+  if (/\[\s*data-dsh-panel\s*(?:[~|^$*]?=\s*(?:"1"|'1'|1))?\s*\]/.test(selector)) return 'panel'
+  // The pack's own panel-state attribute (docs/收录标准.md §3).
+  if (/\[\s*data-dshm-adapt-panel\s*=\s*(?:"1"|'1'|1)\s*\]/.test(selector)) return 'panel'
   if (/\[\s*data-dsh-adapt\s*=\s*(?:"off"|'off'|off)\s*\]/.test(selector)) return 'opt-out'
   for (const at of rule.stack) {
     if (at.name === 'media' && /\(\s*(?:any-)?pointer\s*:\s*coarse\s*\)/i.test(at.prelude)) return 'coarse'
@@ -917,6 +933,7 @@ function measurePage() {
     drawer: rect(document.querySelector('.dshm-drawer')),
     controls,
     panelState: main === null ? null : main.getAttribute('data-dsh-panel'),
+    ownPanelState: main === null ? null : main.getAttribute('data-dshm-adapt-panel'),
     floater: rect(floaterNode),
     floatersVar: getComputedStyle(document.documentElement).getPropertyValue('--dshm-floaters').trim(),
     floatersFlag: document.documentElement.getAttribute('data-dsh-floaters'),
@@ -983,8 +1000,11 @@ async function runFixture(browser, options) {
         activation = await page.evaluate(installPack, {})
         if (activation.length > 0) {
           await page.waitForFunction(
-            () => document.querySelector('.dshm-main')?.hasAttribute('data-dsh-panel') === true
-              || document.documentElement.hasAttribute('data-dsh-floaters'),
+            () => {
+              const main = document.querySelector('.dshm-main')
+              return main !== null && (main.hasAttribute('data-dshm-adapt-panel') || main.hasAttribute('data-dsh-panel'))
+                || document.documentElement.hasAttribute('data-dsh-floaters')
+            },
             undefined,
             { timeout: 1500 },
           ).catch(() => undefined)
@@ -995,6 +1015,26 @@ async function runFixture(browser, options) {
 
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
     const metrics = await page.evaluate(measurePage)
+
+    // A pack that gates rules on the host's own `data-dsh-panel` (dsh-mobile #319)
+    // must back off once the host owns that attribute — and must never write it
+    // itself. Simulate that host: set a sentinel value, let two frames pass (the
+    // pack's own rAF shim would rewrite the attribute by now if it still did), then
+    // read every number again. The sentinel is restored before the later readings.
+    let hostOwned = null
+    if (options.probeHostGate === true && device === 'mobile') {
+      const staged = await page.evaluate(async () => {
+        const main = document.querySelector('.dshm-main')
+        if (main === null) return false
+        main.setAttribute('data-dsh-panel', 'host-probe')
+        await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+        return true
+      })
+      if (staged === true) {
+        hostOwned = await page.evaluate(measurePage)
+        await page.evaluate(() => document.querySelector('.dshm-main')?.removeAttribute('data-dsh-panel'))
+      }
+    }
 
     // The drawer is a rail when collapsed and an overlay when open; a shell pack
     // targets the open state (the thumb is what taps those rows), so measure it
@@ -1031,7 +1071,7 @@ async function runFixture(browser, options) {
         openMetrics = await page.evaluate(measurePage)
       }
     }
-    return { metrics, openMetrics, scrolled, activation, errors, viewport }
+    return { metrics, openMetrics, scrolled, activation, errors, viewport, hostOwned }
   } finally {
     await context.close()
   }
@@ -1163,20 +1203,6 @@ function checkMobileAssertions(report, baseline, after, packId, hasScript) {
     report.skip(layer, 'runtime.mobile.button', 'catalog 未声明 hit-target：跳过面板命中下限')
   }
 
-  if (covers(report, 'rail-clearance')) {
-    const panel = after.metrics.panel
-    if (panel === null) {
-      report.fail(layer, 'runtime.mobile.panel', '找不到面板根（[data-slot="main"] > *）')
-    } else if (panel.left < RAIL_WIDTH - EPSILON) {
-      report.fail(layer, 'runtime.mobile.panel.left', `面板左缘 x=${fmt(panel.left)}，没有让开 ${RAIL_WIDTH}px 折叠轨道`)
-    } else {
-      report.pass(layer, 'runtime.mobile.panel.left', `面板左缘 x=${fmt(panel.left)}（≥ ${RAIL_WIDTH}px）`)
-      if (panel.left > baseline.metrics.panel.left + 1) grew.push('让位')
-    }
-  } else {
-    report.skip(layer, 'runtime.mobile.panel.left', 'catalog 未声明 rail-clearance：跳过轨道让位')
-  }
-
   if (covers(report, 'width-reclaim')) {
     const panel = after.metrics.panel
     if (panel !== null && panel.right > MOBILE_VIEWPORT.width + EPSILON) {
@@ -1202,6 +1228,57 @@ function checkMobileAssertions(report, baseline, after, packId, hasScript) {
     report.pass(layer, 'runtime.mobile.applied', `适配生效：${grew.join(' / ')}`)
   }
   return { buttons, fields }
+}
+
+/**
+ * Host-owned panel state (`data-dsh-panel`, dsh-mobile #319). A pack that gates its
+ * rules on the host's attribute must:
+ *   - leave that attribute alone (the host owns it; a pack that also writes it
+ *     would fight the host on every sync),
+ *   - stop applying the rules the host now provides (no duplicate floor),
+ *   - keep whatever the host does not provide (core-panel's `min-width` for
+ *     svg-only icon buttons).
+ * `after.hostOwned` is the same page measured with a simulated host-owned
+ * attribute; `baseline` is the no-pack reading at the same viewport.
+ */
+function checkHostGate(report, baseline, after) {
+  const layer = 'runtime'
+  const probe = after.hostOwned
+  if (probe === null || probe === undefined) {
+    report.fail(layer, 'runtime.hostGate.probe', '无法模拟宿主自管面板状态（页面里没有 .dshm-main）')
+    return
+  }
+  if (probe.panelState === 'host-probe') {
+    report.pass(layer, 'runtime.hostGate.untouched', '宿主自管的 data-dsh-panel 未被 shim 改写（两帧后仍是 host-probe）')
+  } else {
+    report.fail(layer, 'runtime.hostGate.untouched', `shim 改写了宿主的 data-dsh-panel：期望 host-probe，实际 ${probe.panelState ?? 'null'}`)
+  }
+  if (probe.ownPanelState === '1') {
+    report.pass(layer, 'runtime.hostGate.own-state', '本包自己的 data-dshm-adapt-panel 仍由 shim 维护（=1）')
+  } else {
+    report.fail(layer, 'runtime.hostGate.own-state', `本包自己的面板状态没有写对：data-dshm-adapt-panel=${probe.ownPanelState ?? 'null'}`)
+  }
+
+  const floorFailures = []
+  if (probe.button !== null && probe.button.height > baseline.button.height + 1) {
+    floorFailures.push(`按钮高度 ${fmt(probe.button.height)} ≠ 基线 ${fmt(baseline.button.height)}`)
+  }
+  if (probe.input !== null && baseline.input !== null && probe.input.height > baseline.input.height + 1) {
+    floorFailures.push(`输入高度 ${fmt(probe.input.height)} ≠ 基线 ${fmt(baseline.input.height)}`)
+  }
+  if (floorFailures.length > 0) {
+    report.fail(layer, 'runtime.hostGate.backoff', `宿主已接管面板状态时高度地板没有退让：${floorFailures.join('；')}`)
+  } else {
+    report.pass(layer, 'runtime.hostGate.backoff', `宿主已接管面板状态时高度地板退让（按钮 ${fmt(probe.button?.height)} / 输入 ${fmt(probe.input?.height)} 回到基线）`)
+  }
+
+  if (probe.iconButton !== null) {
+    if (probe.iconButton.width < HIT_TARGET - EPSILON) {
+      report.fail(layer, 'runtime.hostGate.width-kept', `图标按钮宽 ${fmt(probe.iconButton.width)}：宿主不提供 min-width，这条不该退让`)
+    } else {
+      report.pass(layer, 'runtime.hostGate.width-kept', `与宿主不重复的 min-width 仍生效（图标按钮宽 ${fmt(probe.iconButton.width)}）`)
+    }
+  }
 }
 
 /**
@@ -1513,7 +1590,13 @@ async function checkPack(browser, pathArgument, skip, options) {
     validateBaseline(report, baselineDesktop, 'desktop', fixtureInfo)
 
     const pack = { css: staticData.css, js: staticData.js === null ? null : staticData.js.source }
-    const mobile = await runFixture(browser, { device: 'mobile', pack, optOut: false, fixture: fixtureInfo })
+    const mobile = await runFixture(browser, {
+      device: 'mobile',
+      pack,
+      optOut: false,
+      fixture: fixtureInfo,
+      probeHostGate: report.hostGate === true,
+    })
     const optOut = await runFixture(browser, { device: 'mobile', pack, optOut: true, fixture: fixtureInfo })
     const desktop = await runFixture(browser, { device: 'desktop', pack, optOut: false, fixture: fixtureInfo })
 
@@ -1522,6 +1605,7 @@ async function checkPack(browser, pathArgument, skip, options) {
       desktop: { baseline: baselineMetrics.desktop, pack: desktop.metrics },
     }
     checkMobileAssertions(report, baselineMobile, mobile, report.id, staticData.js !== null)
+    if (report.hostGate === true) checkHostGate(report, baselineMetrics.mobile, mobile)
     checkOptOut(report, baselineMobile, optOut)
     checkDesktop(report, baselineDesktop, desktop, options.desktop)
   } catch (error) {

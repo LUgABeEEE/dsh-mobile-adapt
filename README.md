@@ -117,6 +117,21 @@ A new pack starts from [`packs/_template/`](packs/_template/) and has to pass `n
 
 [`docs/phone-instance.md`](docs/phone-instance.md) describes how to drive the real mobile page headlessly, which is how a pack gets verified beyond the fixture.
 
+## Releasing
+
+Push a tag that matches `package.json` and [`.github/workflows/publish.yml`](.github/workflows/publish.yml)
+validates the catalog, then publishes with npm provenance.
+
+```bash
+npm version patch --no-git-tag-version
+git commit -am "chore: 0.1.1"
+git tag v0.1.1 && git push origin main v0.1.1
+```
+
+The job needs the repository secret `NPM_TOKEN` (a granular token with "Read and
+write" publish permission for `dsh-adapt-packs`). `workflow_dispatch` defaults to
+`npm publish --dry-run`.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
