@@ -37,6 +37,16 @@ node tools/install.mjs --uninstall core-panel --yes
 
 `install.mjs` defaults to a dry run, resolves `$DSH_HOME` (or `~/.dsh`), refuses to overwrite an existing pack, and moves an uninstalled pack to `mobile-access-adapt-disabled/` so it can be restored.
 
+## Targeted fixtures
+
+The built-in fixture measures a generic, deliberately desktop-first plugin panel. A pack aimed at one specific plugin can ship `packs/<id>/fixture.html` with that plugin's own DOM; `check-pack` then runs every round (baseline, pack, opt-out, desktop zero-regression) against it instead. Without the file the built-in fixture is used and the report says which one ran — human output prints `fixture：内置（回退内置 fixture）` and `--json` carries `fixture.kind`.
+
+```bash
+node tools/check-pack.mjs docs/examples/fixture-pack --desktop   # runnable example
+```
+
+The contract — allowed markup (DOM + inline styles only, no scripts/external references, ≤ 256 KB), the required shell/panel hooks, how `target` / `usesHostMarkers` / `evidence` must describe the fixture — is in [`docs/收录标准.md`](docs/收录标准.md) §10. `docs/examples/fixture-pack/` is a runnable example, not a real pack: it lives outside `packs/`, is not in `catalog.json`, and therefore reports one harmless catalog warning.
+
 ## Opt out
 
 ```html
