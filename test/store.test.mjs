@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { test } from 'node:test'
 import {
   ID_RE,
@@ -21,13 +21,15 @@ function tempHome() {
 }
 
 test('resolveDshHome matches the CLI defaults', () => {
+  // Compare against path.resolve so the test holds on Windows too: /tmp/... is
+  // not absolute there and resolves against the current drive.
   const explicit = resolveDshHome({ DSH_HOME: '/tmp/some-home' })
-  assert.equal(explicit, '/tmp/some-home')
+  assert.equal(explicit, resolve('/tmp/some-home'))
   // An empty value is "unset", not the current directory.
   const empty = resolveDshHome({ DSH_HOME: '' })
   assert.ok(empty.endsWith(join('.dsh')))
   const spaced = resolveDshHome({ DSH_HOME: '  /tmp/another  ' })
-  assert.equal(spaced, '/tmp/another')
+  assert.equal(spaced, resolve('/tmp/another'))
 })
 
 test('packPaths refuses ids that are not plain slug names', () => {

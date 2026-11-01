@@ -12,6 +12,13 @@ test('package.json declares a complete dsh bundle', () => {
   assert.equal(pkg.dsh.manifestVersion, 1)
   assert.equal(pkg.dsh.bundle.patch, './cordis.patch.yml')
   assert.equal(pkg.dsh.client.platform, 'web')
+  // A settings-only client must be injected at boot; without this the module is
+  // deferred and the browser reports the entry as failed.
+  assert.equal(pkg.dsh.client.immediately, true)
+  // Declare the client service we actually use; without it the module can be
+  // applied before the slots service exists.
+  assert.deepEqual(pkg.dsh.client.inject, ['@deepseek-ai/dsh-client-ui-slots'])
+  assert.match(pkg.engines.dsh, /0\.2\.1-rc\.2/)
   assert.equal(existsSync(join(ROOT, pkg.dsh.bundle.patch)), true)
   assert.equal(pkg.main, 'lib/index.mjs')
   assert.equal(pkg.exports['./client'], './lib/client.js')
@@ -93,6 +100,22 @@ test('apply registers the prefix route on a webServer and the route answers', as
   assert.equal(res.status, 200)
   assert.equal(body.ok, true)
   assert.ok(Array.isArray(body.packs))
+})
+
+test('a context without settings.section degrades instead of failing the bundle', () => {
+  let captured = null
+  const sandbox = {
+    window: { __ModuleLoader__: { load: definition => { captured = definition } } },
+    document: { createElement: () => ({ setAttribute() {}, remove() {}, textContent: '' }), head: { appendChild() {} } },
+    console: { warn() {} },
+  }
+  vm.createContext(sandbox)
+  vm.runInContext(readFileSync(join(ROOT, 'lib/client.js'), 'utf8'), sandbox, { filename: 'client.js' })
+  const ReactStub = { createElement: () => null, useState: value => [value, () => {}], useEffect: () => {}, useCallback: fn => fn }
+  const client = captured.factory(() => ReactStub)
+  const slots = { inject() { throw new Error('no such slot') }, register: () => () => {} }
+  assert.doesNotThrow(() => client.apply({ get: () => slots, slots, effect: () => {} }))
+  assert.doesNotThrow(() => client.apply({}))
 })
 
 test('the host half exports a plugin whose apply tolerates a webServer-less context', async () => {

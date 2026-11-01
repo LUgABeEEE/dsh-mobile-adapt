@@ -5,6 +5,31 @@
 
 ## [Unreleased]
 
+### CI
+
+- 发布不再依赖长期 token：包已通过 npm **trusted publishing** 绑定到本仓库，`publish.yml` 用 GitHub OIDC 换取短期凭据（`npx npm@12 publish --provenance`）。`NPM_TOKEN` secret 可以删除。
+
+### CI
+
+- `scripts/check-bundle.mjs`：把 `npm pack` 的产物装进临时 prefix 再验一遍（文件清单、`dsh.client` 三个字段、patch 行、host 导出、CLI 与 4 个包）。CI 与 `prepublishOnly` 都跑。这一层专门防「源码树里有、发布产物里没有」的清单错误。
+
+### Changed（0.3.4）
+
+- `dsh.client.inject: ["@deepseek-ai/dsh-client-ui-slots"]`：显式声明用到的客户端服务（与 `dsh-skills-manager` 同款）。
+- `engines.dsh: ">=0.2.1-rc.2 <0.3.0"`：把支持的宿主版本写进清单，别让宿主靠猜。
+
+验证：在 **rc.5** 的隔离副本（完整 profile 克隆，端口 3103）里，0.3.3 / 0.3.4 都能 boot 成功、无 `entry did not activate`；
+而**干净的 0.3.1**（缺 `immediately`）在同样环境里稳定复现 `dsh-adapt-packs: failed`。这就是 22:38 那次故障的根因。
+
+### Fixed（0.3.3）
+
+- `dsh.client.immediately: true`：只带设置面板的客户端模块必须随 boot 注入。缺这一项时模块会被推迟，浏览器侧把条目判成 `dsh-adapt-packs: failed`（这就是 22:38 那次「服务器拉不起来、插件 fail」的真正原因）。回归测试锁住这个字段。
+- 0.3.2 的 `apply` 兜底保留：拿不到 `settings.section` 时只 warn 不抛，避免整条 bundle 失败。
+
+### Fixed（0.3.2）
+
+- 设置分区注册失败不再让整条 bundle 判 failed：在缺少 `settings.section` 的 profile（例如只有 `dsh-base + dsh-web-app`）里，`slots.inject` 会抛异常，之前会把 `dsh-adapt-packs: failed` 带进 web boot；现在静默降级（控制台留一条 warn，CLI 不受影响）。补了一条测试。
+
 ### Fixed（设置页 UI，0.3.1）
 
 - 「安装」主按钮在深色主题下不可见：原先用 `--dsw-alias-label-primary` 当底色、`--dsw-alias-bg-base` 当字色，两个 token 在深色主题下可能同时接近白色；改成中性半透明底 + `currentColor` 描边 + 加粗，两种主题都可见。
