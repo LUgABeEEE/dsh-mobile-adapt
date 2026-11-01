@@ -46,7 +46,7 @@
           "宽表/画布类 100vw 插件根的实际溢出压力，以及 720/721/899/900 中间宽度上的数值。",
           "0.8.1 只在桌面 headless Chromium 390×844 上测过；0.8.1 真机 App 未复测（测量当天 USB 断连）。"
         ],
-        "promotion": "发布版 #319（0.8.1）已实测：宿主自带 44px 下限与面板根宽度收口，本包在该版本退让为 no-op；升 candidate 前仍缺 iOS / 其他 Android WebView、拇指真实触达、edge-to-edge 场景。",
+        "promotion": "发布版 #319（0.8.1）已实测：宿主自带 44px 下限与面板根宽度收口，本包在该版本在市场面板上退让为 no-op；升 candidate 前仍缺 iOS / 其他 Android WebView、拇指真实触达、edge-to-edge 场景。",
         "verifiedWith": {
           "dshMobileMain": "post-#319 (6c50b13, shipped in 0.8.1)"
         }
@@ -156,11 +156,11 @@
         "[data-dsh-market-root]"
       ],
       "verifiedWith": {
-        "dshMobile": "0.8.0",
+        "dshMobile": "0.8.0, 0.8.1",
         "dsh": "0.2.1-rc.3"
       },
       "evidence": {
-        "level": "directed-fixture + stock-web-lab",
+        "level": "directed-fixture + stock-web-lab + measured-0.8.1",
         "have": [
           "定向 fixture 通过（不是通用 fixture）：存在 packs/dshmarket-mobile/fixture.html 时 check-pack 全轮次使用它、不回退内置 fixture；RESULT PASS（32 passed · 0 failed · 2 skipped，2026-10-31 本仓库 harness 实测）——390×844 粗指针下 137 个按钮最小边 28→44、图标按钮宽 28→44、输入框高 22→44；opt-out 全部回落（按钮 44→28、输入 44→22）；1280×800 精指针 + --desktop 严格零回归。",
           "真实面板证据（stock DSH web 390×844 @3×，dshmarket 1.73.3 隔离实例捕获）：173 个可交互元素中 172 个 <44px（98.3%，最小 12.1px），搜索输入 154×24px / font-size 14px；对应 check-pack 计量口径（不含卡片 a 链接）为 138 个控件。fixture 为脱敏后的真实 DOM 快照，142,712 B（<256 KB），无脚本/外链/会话数据。",
