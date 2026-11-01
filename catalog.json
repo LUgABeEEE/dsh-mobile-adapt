@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updated": "2026-10-31",
+  "updated": "2026-11-01",
   "runtime": {
     "dshMobile": ">=0.8.0 <0.9.0",
     "dsh": ">=0.2.1"
@@ -161,16 +161,19 @@
           "定向 fixture 通过（不是通用 fixture）：存在 packs/dshmarket-mobile/fixture.html 时 check-pack 全轮次使用它、不回退内置 fixture；RESULT PASS（32 passed · 0 failed · 2 skipped，2026-10-31 本仓库 harness 实测）——390×844 粗指针下 137 个按钮最小边 28→44、图标按钮宽 28→44、输入框高 22→44；opt-out 全部回落（按钮 44→28、输入 44→22）；1280×800 精指针 + --desktop 严格零回归。",
           "真实面板证据（stock DSH web 390×844 @3×，dshmarket 1.73.3 隔离实例捕获）：173 个可交互元素中 172 个 <44px（98.3%，最小 12.1px），搜索输入 154×24px / font-size 14px；对应 check-pack 计量口径（不含卡片 a 链接）为 138 个控件。fixture 为脱敏后的真实 DOM 快照，142,712 B（<256 KB），无脚本/外链/会话数据。",
           "dsh-ui-lab 对照（stock DSH web，390×844，隔离实例 + --inject 模拟装包）：可测控件 138，最小边 12.1→44px，<44px 计数 138→0，面板盒 334×844 @x=56 未变、横向溢出 false；截图 packs/dshmarket-mobile/shots/{before,after}-390x844.png。口径=stock web 挤窄视口，不是专用移动页。",
-          "输入框 font-size:16px 由规则设置；check-pack 现以 runtime.mobile.inputFontSize 断言文本输入 computed 字号 ≥16px（本包规则实测 16px 通过），真实页面字号仍待真机复核。"
+          "输入框 font-size:16px 由规则设置；check-pack 以 runtime.mobile.inputFontSize 断言文本输入 computed 字号 ≥16px（本包规则实测 16px 通过）；真机本轮测量了控件尺寸与命中区，未单独记录专用页输入字号。",
+          "dsh-mobile 0.8.0 专用页（桌面 headless，390×844 粗指针，隔离网关）：无包基线主槽 141 / 最小 12.1px / 141 个 <44，市场根 138 / 12.1 / 138；只装本包后市场根 138 / 44 / 0，主槽其余控件保持 20 / 3（未越界）；opt-out 与卸载逐项回落到基线。",
+          "Android App 真机（Redmi K90 Max / Android 17 / dsh-mobile App 0.7.1，2026-11-01）：无包基线主槽 141 / 14 / 141、市场根 138 / 14 / 138；只装本包后市场根 137 / 44 / 0，主槽其余控件 20 / 3；与 core-panel 同装时主槽 141 / 44 / 0、市场根 138 / 44 / 0。真机 env(safe-area-inset-*) 全 0（App 非 edge-to-edge），软键盘使 innerHeight 786 → 472。详见 docs/真机验证.md。"
         ],
         "missing": [
-          "真机未验证：未在 iOS/Android WebView、真实 env(safe-area-inset-*)、软键盘弹出后的可视区、拇指准确度上跑过。",
-          "dsh-mobile 专用移动页未验证：本机没有可用的专用移动页运行时；surfaces 虽声明 mobile-dedicated，所有数字来自 stock web 与合成外壳 fixture，不能替代专用页。",
           "通用 fixture 结论：本包未用通用 fixture 出结论（存在定向 fixture 时 check-pack 不回退；内置 fixture 没有 [data-dsh-market-root]，对 dshmarket 断言是空转）——本条目中的“通过”只指定向 fixture 与 stock web lab 两层。",
           "dshmarket 1.73.6（repo HEAD）未实测：fixture 与基线均来自本机安装的 1.73.3。",
-          "themes 全屏预览 / portal 弹层状态未覆盖（[data-dsh-market-fullscreen] / [data-dsh-market-portal] 不在六项能力内）。"
+          "themes 全屏预览 / portal 弹层状态未覆盖（[data-dsh-market-fullscreen] / [data-dsh-market-portal] 不在六项能力内）。",
+          "iOS / WKWebView 未验证；Android 只覆盖一台设备（K90 Max / Android 17 / App 0.7.1）。",
+          "拇指真实触达未验证：命中区是 CSS 尺寸（getBoundingClientRect），不是手指触达；伪元素扩边的隐形命中区需 elementFromPoint 边缘探测。",
+          "edge-to-edge 全屏 App 未验证：当前 App 把 WebView 放在系统栏内（env(safe-area-inset-*) = 0），换成 viewport-fit=cover 后需重测。"
         ],
-        "promotion": "补齐 dsh-mobile 0.8.0 专用页运行时 + 真机实测后才可升 candidate；stock web 的 lab 数据只能作近似，不能替代专用移动页。"
+        "promotion": "真机已覆盖 Android 单机（K90 Max / Android 17 / App 0.7.1）；升 candidate 前仍需补 iOS 与 edge-to-edge 场景，或由宿主明确声明专用页的 safe-area 契约。"
       },
       "since": "0.2.0"
     }

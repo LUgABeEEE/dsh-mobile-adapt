@@ -5,9 +5,9 @@
 > nothing else in the panel is touched.
 
 - **目标插件**：`dshmarket`（面板根 `[data-dsh-market-root]`，入口：侧栏「插件市场」）。
-  实测版本 **1.73.3**（本机 desktop profile 安装版）；仓库 HEAD `1.73.6` **未实测**。
-- **实测环境**：**stock DSH web 挤到 390×844 · `(pointer: coarse)`**（隔离 DSH 实例）。
-  dsh-mobile **专用移动页未验证**（本机未启用真实移动页）；真机未验证。
+  实测版本 **1.73.3**；仓库 HEAD `1.73.6` 只做过 DOM 复核（标记/控件集合一致、几何 Δ≤1px），未跑完整交互态。
+- **实测环境**：① **stock DSH web 挤到 390×844 · `(pointer: coarse)`**（隔离 DSH 实例）；② **dsh-mobile 0.8.0 专用页**（桌面 headless）；③ **Android App 真机**（Redmi K90 Max / Android 17 / App 0.7.1，2026-11-01）。
+  真机口径与数据见 [`docs/真机验证.md`](../docs/真机验证.md)。
 - **风险 / 状态**：`safe` / `experimental` — 纯 CSS 命中下限，不改结构、不注入脚本。
 - **回滚**：删掉 `$DSH_HOME/mobile-access/extensions/dshmarket-mobile/` 即回滚（2s 内卸载）；
   本包不改任何已安装的 DSH 产物。opt-out 也可用：面板根/文档根带 `data-dsh-adapt="off"`。
@@ -19,9 +19,9 @@
 | 证据层 | 状态 | 数字 |
 |---|---|---|
 | 通用 fixture（`check-pack` 内置） | **未使用/不适用** —— 本包存在 `packs/dshmarket-mobile/fixture.html`，`check-pack` 全轮次都用定向 fixture，不回退内置；内置 fixture 里也没有 `[data-dsh-market-root]`，用它对 dshmarket 断言等于空转 | — |
-| **定向 fixture**（`check-pack`，390×844 粗指针） | **通过** | 137 个按钮最小边 **28→44px**、图标按钮宽 **28→44px**、输入框高 **22→44px**；opt-out 全部回落到基线；1280×800 精指针 + `--desktop` 严格零回归。合计 **RESULT PASS（30 passed · 0 failed · 4 skipped）** |
+| **定向 fixture**（`check-pack`，390×844 粗指针） | **通过** | 137 个按钮最小边 **28→44px**、图标按钮宽 **28→44px**、输入框高 **22→44px**；opt-out 全部回落到基线；1280×800 精指针 + `--desktop` 严格零回归。合计 **RESULT PASS（32 passed · 0 failed · 2 skipped；`--desktop` 为 33 / 0 / 2）** |
 | **真实面板 / stock DSH web**（隔离实例捕获 + `dsh-ui-lab` 390×844 注入对照） | **通过（stock web 口径）** | 捕获口径：173 个可交互元素中 **172 个 <44px**（98.3%，最小 12.1px）；搜索输入 **154×24px、font-size 14px**。lab 口径：可测控件 138，最小边 **12.1→44px**，<44px 计数 **138→0**，面板盒 334×844 未变、无横向溢出 |
-| dsh-mobile 专用移动页 / 真机 | **未验证** —— 本机没有可用的专用移动页运行时，也没有真机 | 见 §6 |
+| **dsh-mobile 专用移动页 / 真机**（App 0.7.1 + Android 17，2026-11-01） | **通过** | 无包基线：主槽 141 个控件全部 <44px（最小 **14px**）、市场根 138 个全部 <44px；只装本包后市场根 **138 个控件 / 最小 44px / 0 个 <44px**，主槽其余控件保持 20/3（未越界）；与 `core-panel` 同装时主槽 **141/44/0**。真机 `env(safe-area-inset-*)` 全 0（App 非 edge-to-edge）、软键盘 786→472。详见 [`docs/真机验证.md`](../docs/真机验证.md) |
 
 两个数字（172/173 与 138/138）不是矛盾，是**口径不同**：
 
@@ -92,7 +92,7 @@ node tools/check-pack.mjs packs/dshmarket-mobile --desktop
 本机实跑（Windows，2026-10-31）：
 
 ```
-RESULT PASS（30 passed · 0 failed · 4 skipped）
+RESULT PASS（32 passed · 0 failed · 2 skipped）
 ```
 
 - 静态层：5 字段 manifest、3 条选择器全部落在允许作用域、无第三方类名、无 `:has`、
@@ -109,6 +109,16 @@ dsh-ui-lab 对照（**stock DSH web 口径**，390×844 @3×，隔离实例 + `-
 | after | 138 | **44px** | **0 / 138** | 334×844 @x=56（未变） | 无 |
 
 截图：`shots/before-390x844.png`、`shots/after-390x844.png`（同口径，仅注入 CSS 不同）。
+
+真机 App 对照（**Android 17 / dsh-mobile App 0.7.1 / 专用页**，2026-11-01；同一「插件 → 插件市场」路径，只改变安装的包）：
+
+| 状态 | 主槽（n / 最小边 / <44） | 市场根（n / 最小边 / <44） |
+|---|---|---|
+| 无包（before） | 141 / **14px** / **141** | 138 / **14px** / **138** |
+| 仅本包 | 140 / 20 / 3 | 137 / **44px** / **0** |
+| 本包 + `core-panel`（after） | 141 / **44px** / **0** | 138 / **44px** / **0** |
+
+与桌面专用页逐项一致；差异只有两处且都不是包的问题：真机无包基线最小边 14px vs 桌面 12.1px（字体渲染差）、虚拟滚动导致单包时 n 少 1。完整方法、`safe-area` 与软键盘数据见 [`docs/真机验证.md`](../docs/真机验证.md)。
 复跑命令（两个面都不装 dsh-mobile；隔离实例 + 临时 inject helper 收起首启弹窗与抽屉）：
 
 ```bash
@@ -123,12 +133,12 @@ helper 只存在于测量脚本里，**不随 pack 发布**。
 
 ## 6. 未验证 / 边界
 
-1. **dsh-mobile 专用移动页未实测**：本包 `surfaces` 只声明 `mobile-dedicated`（安装通道所在面），
-   但本机没有可用的专用移动页运行时；所有数字来自 stock web 与合成外壳 fixture。
-2. **真机未验证**：拇指准确度、真实 `env(safe-area-inset-*)`、软键盘弹出后的可视区。
-3. **dshmarket 1.73.6 未测**：fixture 与基线都来自本机 1.73.3。
-4. **输入框字号**：规则设为 16px，但 `check-pack` 当前只断言输入框高度（工具未断言字号），
-   字号效果需在真实页面/真机复核。
+1. **dsh-mobile 专用移动页已在桌面 headless 与 Android App 真机上实测**：本包 `surfaces` 声明 `mobile-dedicated`（安装通道所在面），
+   数字见 §5（桌面 0.8.0 专用页）与 [`docs/真机验证.md`](../docs/真机验证.md)（Android App 0.7.1）；stock web 数据只作近似。
+2. **真机只覆盖 Android 单机**：Android 17 / App 0.7.1 已实测命中区、safe-area 与软键盘；**iOS、拇指真实触达、edge-to-edge 全屏 App 仍未验证**。
+3. **dshmarket 1.73.6 只做 DOM 复核**：标记集/控件集合一致、几何 Δ≤1px，未跑完整交互态；fixture 与基线仍来自 1.73.3。
+4. **输入框字号**：规则设为 16px；`check-pack` 自 2026-10-31 起以 `runtime.mobile.inputFontSize` 断言文本输入 computed 字号 ≥16px（真机实测通过），
+   后续若宿主改字号，以断言为准。
 5. **卡片整卡点击层**：dshmarket 的卡片是 `<a>`，不在 `check-pack` 的控件选择器内；本包只对
    按钮/输入类控件做下限，卡片点击层未改（如需 44px 整卡，应由插件自己或后续 pack 处理）。
 6. **themes 全屏预览 / portal 弹层**：`[data-dsh-market-fullscreen]` / `[data-dsh-market-portal]`
