@@ -138,6 +138,9 @@ function compat(argv) {
   }
 
   console.log(`兼容清单 · 更新于 ${parsed.updated ?? '?'} · ${entries.length} 个插件${wanted === null ? '' : `（${wanted}）`}`)
+  for (const line of Array.isArray(parsed.hostBaseline) ? parsed.hostBaseline : []) {
+    console.log(`  宿主 ${padEnd(line.dshMobile ?? '?', 14)} ${line.summary ?? ''}`)
+  }
   const counts = new Map()
   for (const entry of parsed.entries ?? []) counts.set(entry.verdict, (counts.get(entry.verdict) ?? 0) + 1)
   console.log(`  汇总：${[...counts.entries()].map(([verdict, count]) => `${verdict} ${count}`).join(' · ')}`)

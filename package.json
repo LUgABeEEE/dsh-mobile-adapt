@@ -1,6 +1,6 @@
 {
   "name": "dsh-adapt-packs",
-  "version": "0.3.5",
+  "version": "0.3.6",
   "type": "module",
   "description": "Opt-in adaptation packs for the DSH mobile surface (a host-aware 44px touch floor, icon-button width, width reclaim, floating-widget clearance) plus a compatibility list of third-party plugins on a phone.",
   "license": "MIT",

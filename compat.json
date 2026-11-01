@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updated": "2026-10-31",
+  "updated": "2026-11-01",
   "note": "第三方 DSH 插件在手机上的适配结论。verdict: native=原生可用无需干预；pack=本仓库有对应适配包；upstream=建议插件作者自己改；blocked=当前架构下做不了（自绘/原生/无面板 DOM）。证据等级写在 evidence 里，没有实测的一律标未验证。",
   "entries": [
     {
@@ -60,6 +60,19 @@
         "repo": "https://github.com/YuJunZhiXue/dsh-purge",
         "npm": "dsh-purge"
       }
+    }
+  ],
+  "hostBaseline": [
+    {
+      "dshMobile": "0.7.x – 0.8.0",
+      "summary": "面板控件没有下限：第三方面板在手机上普遍小于 44px，本仓库的包负责补齐。",
+      "evidence": "0.8.0 安装包实测（390×844 粗指针）：172/173 个可交互元素 <44px，最小 12.1px。"
+    },
+    {
+      "dshMobile": "0.8.1 起",
+      "summary": "main-slot 面板自带 coarse-pointer 控件下限（44px），带 root opt-out，排除 switch / range / 嵌套 opt-out 控件；精指针几何不变。core-panel 的门阀会让高度地板退让，只保留宿主不提供的 min-width。",
+      "source": "https://github.com/saya-ch/dsh-mobile/pull/319",
+      "evidence": "dsh-mobile 0.8.1 changelog（2026-11-01）；本仓库的 host-probe 在合成宿主状态下验证过退让，真实 0.8.1 运行时未实测。"
     }
   ]
 }

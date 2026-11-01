@@ -5,6 +5,17 @@
 
 ## [Unreleased]
 
+## [0.3.6] - 2026-11-01
+
+### Added
+
+- `compat.json.hostBaseline`：按宿主版本记录「面板控件有没有自带地板」。0.7.x–0.8.0 没有（172/173 个控件 <44px），**0.8.1 起** main-slot 面板自带 coarse-pointer 44px 下限（含 root opt-out，排除 switch/range/嵌套 opt-out），`core-panel` 的门阀随之退让。
+- `dsh-adapt-packs compat` 与设置页都会先打印宿主基线，再列插件结论——读结论前先知道宿主已经替你做了什么。
+
+### Docs
+
+- README / `docs/收录标准.md` / `catalog.json`：把「#319 尚未发布」更正为「随 0.8.1 于 2026-11-01 发布」，并明确 0.8.1 上的运行时**本机尚未实测**（本机仍是 0.8.0），只有 host-probe 的合成验证。
+
 ### CI
 
 - 发布不再依赖长期 token：包已通过 npm **trusted publishing** 绑定到本仓库，`publish.yml` 用 GitHub OIDC 换取短期凭据（`npx npm@12 publish --provenance`）。`NPM_TOKEN` secret 可以删除。

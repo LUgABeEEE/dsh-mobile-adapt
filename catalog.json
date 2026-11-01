@@ -41,11 +41,14 @@
           "rail-clearance 已退役：390 面板态下抽屉是 `data-right-modal` → display:none（宽 0），768 上宿主已 margin-left:56px 让位、且本包媒体查询（max-width:720）不命中——两种尺寸都没有可测量的让位场景，规则已删除。【事实】实测-0.8.0-20261031.md §4.1/§4.2"
         ],
         "missing": [
-          "含 #319 的发布版（≥0.8.1，尚无 tag）上的真实运行时：门阀退让后的数值只在 check-pack 的 host-probe 合成状态下验证过，未在真实宿主上量。",
+          "含 #319 的发布版（≥0.8.1，2026-11-01 已发布）上的真实运行时：门阀退让后的数值只在 check-pack 的 host-probe 合成状态下验证过；本机仍跑 0.8.0，尚未在真实 0.8.1 宿主上量。",
           "真机验证（iOS / Android WebView，390×844 触摸）：拇指准确度、真实 env(safe-area-inset-bottom)（headless 里为 0）、软键盘弹出后的可视区。",
           "宽表/画布类 100vw 插件根的实际溢出压力，以及 720/721/899/900 中间宽度上的数值。"
         ],
-        "promotion": "补齐含 #319 的发布版运行时 + 真机实测后才可升 candidate；check-pack 的 0.8.0 / 宿主自管两种状态是合成夹具，不能替代真机。"
+        "promotion": "补齐含 #319 的发布版运行时 + 真机实测后才可升 candidate；check-pack 的 0.8.0 / 宿主自管两种状态是合成夹具，不能替代真机。",
+        "verifiedWith": {
+          "dshMobileMain": "post-#319 (6c50b13, shipped in 0.8.1)"
+        }
       },
       "since": "0.1.0"
     },

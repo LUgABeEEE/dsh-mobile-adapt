@@ -52,6 +52,8 @@ test('GET state reports the catalog, the compat list and the current home', asyn
     assert.ok(result.json.packs.length >= 4)
     assert.ok(result.json.packs.every(pack => typeof pack.installed === 'boolean'))
     assert.ok(Array.isArray(result.json.compat))
+    assert.ok(Array.isArray(result.json.compatHostBaseline))
+    assert.ok(result.json.compatHostBaseline.some(line => /0\.8\.1/.test(line.dshMobile)))
     assert.equal(result.headers['cache-control'], 'no-store')
   } finally {
     if (previous === undefined) delete process.env.DSH_HOME
