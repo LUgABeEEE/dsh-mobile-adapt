@@ -1,15 +1,16 @@
 {
   "name": "dsh-adapt-packs",
-  "version": "0.3.1",
+  "version": "0.3.5",
   "type": "module",
   "description": "Opt-in adaptation packs for the DSH mobile surface (a host-aware 44px touch floor, icon-button width, width reclaim, floating-widget clearance) plus a compatibility list of third-party plugins on a phone.",
   "license": "MIT",
   "scripts": {
     "list": "node tools/cli.mjs list",
     "check": "node tools/check-pack.mjs",
-    "prepublishOnly": "node --test && node tools/cli.mjs list",
+    "prepublishOnly": "node --test && node scripts/check-bundle.mjs",
     "test": "node --test",
-    "verify": "node --test && node tools/cli.mjs list"
+    "verify": "node --test && node scripts/check-bundle.mjs && node tools/cli.mjs list",
+    "check:bundle": "node scripts/check-bundle.mjs"
   },
   "repository": {
     "type": "git",
@@ -50,7 +51,8 @@
     "LICENSE"
   ],
   "engines": {
-    "node": ">=20"
+    "node": ">=20",
+    "dsh": ">=0.2.1-rc.2 <0.3.0"
   },
   "publishConfig": {
     "access": "public"
@@ -67,7 +69,11 @@
       "patch": "./cordis.patch.yml"
     },
     "client": {
-      "platform": "web"
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-slots"
+      ]
     }
   }
 }
