@@ -133,7 +133,7 @@ Each pack stops applying entirely — panel spacing returns to its own values, s
 | Real runtime on **dsh-mobile 0.8.0** | ✅ measured on the real gateway (390×844, coarse pointer, Plugins panel) — see `实测-0.8.0-20261031.md` in the workspace |
 | Real runtime on **main after #319** | ❌ no build contains it yet (verified 2026-10-31: latest release/tag/npm is v0.8.0); merge diff + a `check-pack` host-probe only |
 | Real runtime on **0.7.1** | ✅ historically (2026-10-31 earlier run); the 122px / 36→44px numbers were the same as 0.8.0 |
-| Physical device | ❌ never — no thumb, no soft keyboard, no real `env(safe-area-inset-*)` |
+| Physical device | ✅ Android App measured (2026-11-01, Redmi K90 Max / Android 17 / dsh-mobile App 0.7.1): with `core-panel` installed (or with the full set) the slot reaches 141/44/0 where the no-pack baseline is 141/14/141 (`dshmarket-mobile` alone only fixes the market root); real `env(safe-area-inset-*)` is 0 because this App is **not** edge-to-edge; the soft keyboard shrinks the viewport 786→472. See [`docs/真机验证.md`](docs/真机验证.md). iOS, thumb-reach feel and edge-to-edge apps remain unverified |
 
 ### Two release lines: 0.8.0 vs main (#319)
 
