@@ -70,9 +70,9 @@
     },
     {
       "dshMobile": "0.8.1 起",
-      "summary": "main-slot 面板自带 coarse-pointer 控件下限（44px），带 root opt-out，排除 switch / range / 嵌套 opt-out 控件；精指针几何不变。core-panel 的门阀会让高度地板退让，只保留宿主不提供的 min-width。",
+      "summary": "main-slot 面板自带 coarse-pointer 控件下限（44px），带 `data-dsh-adapt=off` opt-out（文档级属性同样会关闭下限，实测），排除 switch / range / 嵌套 opt-out 控件；精指针几何不变。宿主下限同时设置 `min-width:44px`；实测本仓库两个包在 0.8.1 的插件市场面板（无 textarea）上数值不变（门阀退让）；宿主下限不含 textarea，两包的 textarea 规则仍可能有意义（本轮未测到差异）。",
       "source": "https://github.com/saya-ch/dsh-mobile/pull/319",
-      "evidence": "dsh-mobile 0.8.1 changelog（2026-11-01）；本仓库的 host-probe 在合成宿主状态下验证过退让，真实 0.8.1 运行时未实测。"
+      "evidence": "真实 0.8.1 运行时实测（2026-11-01，隔离网关 + headless Chromium 390×844）：无包即 141/44/0 与 138/44/0（0.8.0 基线 141/12.1/141、138/12.1/138）；只装 core-panel、只装 dshmarket-mobile、两者都装均不改变数值；文档级 data-dsh-adapt=off 回到 12.1（宿主 CSS 的 [data-dsh-adapt=off] * 排除）。见 docs/0.8.1-宿主下限验证.md。注：该面板无 textarea；宿主下限不含 textarea，两包 textarea 规则未测到差异。"
     }
   ]
 }

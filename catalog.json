@@ -27,25 +27,26 @@
         "[data-slot=\"main\"]"
       ],
       "verifiedWith": {
-        "dshMobile": "0.8.0",
+        "dshMobile": "0.8.0, 0.8.1",
         "dsh": "0.2.1-rc.2",
-        "dshMobileMain": "post-#319 (6c50b13, unreleased)"
+        "dshMobileMain": "0.8.1 (2026-11-01, measured)"
       },
       "evidence": {
-        "level": "runtime-0.8.0",
+        "level": "runtime-0.8.0 + measured-0.8.1",
         "have": [
           "check-pack 37/0/0（390×844 粗指针、1280×800 精指针严格零回归、opt-out、宿主自管面板状态时的门阀）：按钮 28→44、图标按钮 28×28→44×44、输入/下拉 32→44；桌面逐项等于基线。",
           "0.8.0 真实运行时（真实网关 192.168.1.11:3443，390×844 粗指针，Plugins 面板）：纯宿主 94/94 个主槽控件 <44px（最小 20px：About plugins 20×20、Refresh 28×28、tab 34px、switch 36×20）；只开本包后 94→41 未达标（抬起 53 个；最小命中仍是 20px，未达标控件类型 t1 未定性）。【事实】实测-0.8.0-20261031.md §4.1",
           "面板态横向溢出：390 上 390/390、768 上 768/768，本包不改变面板左右缘（宽度回收在 0.8.0 无触发场景，只作 100vw/固定像素根的兜底）。【事实】同上 §4.1 / §4.2",
-          "release/main 分线（本包唯一的版本判断，纯 CSS）：0.8.0 安装包里 data-dsh-panel 与 text-size-adjust 均 0 命中、docs/MOBILE_PLUGIN_BASELINE.md 不存在（v0.8.0 发布 10-30T03:14Z）；#319 合入 main（6c50b13，10-31T08:46Z）后宿主自己写 data-dsh-panel，并给面板内 button/[role=button]/select/input/textarea 44px 高度地板、给面板根 max-width:100%。本包用 .dshm-main:not([data-dsh-panel]) 作门阀：0.8.0 上给高度地板，宿主接管后高度地板与宽度收口退让，只保留宿主不提供的 min-width:44（svg-only 图标按钮）。shim 不写宿主的 data-dsh-panel，改用自有 data-dshm-adapt-panel；check-pack 以 host-probe 模拟宿主自管状态，断言门阀退让、宿主属性未被改写。【事实】grep + #319 merge diff；宿主版运行时未实测【推断】",
-          "rail-clearance 已退役：390 面板态下抽屉是 `data-right-modal` → display:none（宽 0），768 上宿主已 margin-left:56px 让位、且本包媒体查询（max-width:720）不命中——两种尺寸都没有可测量的让位场景，规则已删除。【事实】实测-0.8.0-20261031.md §4.1/§4.2"
+          "release/main 分线（本包唯一的版本判断，纯 CSS）：0.8.0 安装包里 data-dsh-panel 与 text-size-adjust 均 0 命中、docs/MOBILE_PLUGIN_BASELINE.md 不存在（v0.8.0 发布 10-30T03:14Z）；#319 合入 main（6c50b13，10-31T08:46Z）后宿主自己写 data-dsh-panel，并给面板内 button/[role=button]/select/input（不含 textarea）44px 下限与 touch-action、给面板根 max-width:100%。本包用 .dshm-main:not([data-dsh-panel]) 作门阀：0.8.0 上给高度地板，宿主接管后高度地板与宽度收口退让，只保留宿主不提供的 min-width:44（svg-only 图标按钮）。shim 不写宿主的 data-dsh-panel，改用自有 data-dshm-adapt-panel；check-pack 以 host-probe 模拟宿主自管状态，断言门阀退让、宿主属性未被改写。【事实】grep + #319 merge diff + 0.8.1 运行时实测（docs/0.8.1-宿主下限验证.md）",
+          "rail-clearance 已退役：390 面板态下抽屉是 `data-right-modal` → display:none（宽 0），768 上宿主已 margin-left:56px 让位、且本包媒体查询（max-width:720）不命中——两种尺寸都没有可测量的让位场景，规则已删除。【事实】实测-0.8.0-20261031.md §4.1/§4.2",
+          "0.8.1 真实运行时（发布版 #319，2026-11-01 实测）：无包基线主槽即 141 / 44 / 0、市场根 138 / 44 / 0（宿主写入 data-dsh-panel=1 并自带 min-width/min-height 44px !important）；装本包后数值不变（门阀退让，no-op）；只装本包或只装 dshmarket-mobile 结果相同。注：该面板无 textarea；宿主下限不含 textarea，本包 textarea 规则未测到差异。【事实】docs/0.8.1-宿主下限验证.md"
         ],
         "missing": [
-          "含 #319 的发布版（≥0.8.1，2026-11-01 已发布）上的真实运行时：门阀退让后的数值只在 check-pack 的 host-probe 合成状态下验证过；本机仍跑 0.8.0，尚未在真实 0.8.1 宿主上量。",
           "真机验证（iOS / Android WebView，390×844 触摸）：拇指准确度、真实 env(safe-area-inset-bottom)（headless 里为 0）、软键盘弹出后的可视区。",
-          "宽表/画布类 100vw 插件根的实际溢出压力，以及 720/721/899/900 中间宽度上的数值。"
+          "宽表/画布类 100vw 插件根的实际溢出压力，以及 720/721/899/900 中间宽度上的数值。",
+          "0.8.1 只在桌面 headless Chromium 390×844 上测过；0.8.1 真机 App 未复测（测量当天 USB 断连）。"
         ],
-        "promotion": "补齐含 #319 的发布版运行时 + 真机实测后才可升 candidate；check-pack 的 0.8.0 / 宿主自管两种状态是合成夹具，不能替代真机。",
+        "promotion": "发布版 #319（0.8.1）已实测：宿主自带 44px 下限与面板根宽度收口，本包在该版本在市场面板上退让为 no-op；升 candidate 前仍缺 iOS / 其他 Android WebView、拇指真实触达、edge-to-edge 场景。",
         "verifiedWith": {
           "dshMobileMain": "post-#319 (6c50b13, shipped in 0.8.1)"
         }
@@ -155,18 +156,19 @@
         "[data-dsh-market-root]"
       ],
       "verifiedWith": {
-        "dshMobile": "0.8.0",
+        "dshMobile": "0.8.0, 0.8.1",
         "dsh": "0.2.1-rc.3"
       },
       "evidence": {
-        "level": "directed-fixture + stock-web-lab",
+        "level": "directed-fixture + stock-web-lab + measured-0.8.1",
         "have": [
           "定向 fixture 通过（不是通用 fixture）：存在 packs/dshmarket-mobile/fixture.html 时 check-pack 全轮次使用它、不回退内置 fixture；RESULT PASS（32 passed · 0 failed · 2 skipped，2026-10-31 本仓库 harness 实测）——390×844 粗指针下 137 个按钮最小边 28→44、图标按钮宽 28→44、输入框高 22→44；opt-out 全部回落（按钮 44→28、输入 44→22）；1280×800 精指针 + --desktop 严格零回归。",
           "真实面板证据（stock DSH web 390×844 @3×，dshmarket 1.73.3 隔离实例捕获）：173 个可交互元素中 172 个 <44px（98.3%，最小 12.1px），搜索输入 154×24px / font-size 14px；对应 check-pack 计量口径（不含卡片 a 链接）为 138 个控件。fixture 为脱敏后的真实 DOM 快照，142,712 B（<256 KB），无脚本/外链/会话数据。",
           "dsh-ui-lab 对照（stock DSH web，390×844，隔离实例 + --inject 模拟装包）：可测控件 138，最小边 12.1→44px，<44px 计数 138→0，面板盒 334×844 @x=56 未变、横向溢出 false；截图 packs/dshmarket-mobile/shots/{before,after}-390x844.png。口径=stock web 挤窄视口，不是专用移动页。",
           "输入框 font-size:16px 由规则设置；check-pack 以 runtime.mobile.inputFontSize 断言文本输入 computed 字号 ≥16px（本包规则实测 16px 通过）；真机本轮测量了控件尺寸与命中区，未单独记录专用页输入字号。",
           "dsh-mobile 0.8.0 专用页（桌面 headless，390×844 粗指针，隔离网关）：无包基线主槽 141 / 最小 12.1px / 141 个 <44，市场根 138 / 12.1 / 138；只装本包后市场根 138 / 44 / 0，主槽其余控件保持 20 / 3（未越界）；opt-out 与卸载逐项回落到基线。",
-          "Android App 真机（Redmi K90 Max / Android 17 / dsh-mobile App 0.7.1，2026-11-01）：无包基线主槽 141 / 14 / 141、市场根 138 / 14 / 138；只装本包后市场根 137 / 44 / 0，主槽其余控件 20 / 3；与 core-panel 同装时主槽 141 / 44 / 0、市场根 138 / 44 / 0。真机 env(safe-area-inset-*) 全 0（App 非 edge-to-edge），软键盘使 innerHeight 786 → 472。详见 docs/真机验证.md。"
+          "Android App 真机（Redmi K90 Max / Android 17 / dsh-mobile App 0.7.1，2026-11-01）：无包基线主槽 141 / 14 / 141、市场根 138 / 14 / 138；只装本包后市场根 137 / 44 / 0，主槽其余控件 20 / 3；与 core-panel 同装时主槽 141 / 44 / 0、市场根 138 / 44 / 0。真机 env(safe-area-inset-*) 全 0（App 非 edge-to-edge），软键盘使 innerHeight 786 → 472。详见 docs/真机验证.md。",
+          "0.8.1（发布版 #319，2026-11-01 实测）：无包时市场根已是 138 / 44 / 0（0.8.0 无包为 138 / 12.1 / 138）；装本包数值不变（该面板无 textarea；宿主下限不含 textarea，本包 textarea 规则仍有意义）。【事实】docs/0.8.1-宿主下限验证.md"
         ],
         "missing": [
           "通用 fixture 结论：本包未用通用 fixture 出结论（存在定向 fixture 时 check-pack 不回退；内置 fixture 没有 [data-dsh-market-root]，对 dshmarket 断言是空转）——本条目中的“通过”只指定向 fixture 与 stock web lab 两层。",
@@ -174,9 +176,10 @@
           "themes 全屏预览 / portal 弹层状态未覆盖（[data-dsh-market-fullscreen] / [data-dsh-market-portal] 不在六项能力内）。",
           "iOS / WKWebView 未验证；Android 只覆盖一台设备（K90 Max / Android 17 / App 0.7.1）。",
           "拇指真实触达未验证：命中区是 CSS 尺寸（getBoundingClientRect），不是手指触达；伪元素扩边的隐形命中区需 elementFromPoint 边缘探测。",
-          "edge-to-edge 全屏 App 未验证：当前 App 把 WebView 放在系统栏内（env(safe-area-inset-*) = 0），换成 viewport-fit=cover 后需重测。"
+          "edge-to-edge 全屏 App 未验证：当前 App 把 WebView 放在系统栏内（env(safe-area-inset-*) = 0），换成 viewport-fit=cover 后需重测。",
+          "0.8.1 只在桌面 headless Chromium 390×844 上测过；0.8.1 真机未复测。"
         ],
-        "promotion": "真机已覆盖 Android 单机（K90 Max / Android 17 / App 0.7.1）；升 candidate 前仍需补 iOS 与 edge-to-edge 场景，或由宿主明确声明专用页的 safe-area 契约。"
+        "promotion": "真机已覆盖 Android 单机（K90 Max / Android 17 / App 0.7.1）；0.8.1 宿主已自带下限（不含 textarea），本包在实测市场面板上为 no-op。升 candidate 前仍需补 iOS 与 edge-to-edge 场景，或由宿主明确声明专用页的 safe-area 契约。"
       },
       "since": "0.2.0"
     }
