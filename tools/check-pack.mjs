@@ -105,7 +105,11 @@ const PACKS_DIR_REAL = onDiskPath(PACKS_DIR)
 const MOBILE_VIEWPORT = Object.freeze({ width: 390, height: 844 })
 const DESKTOP_VIEWPORT = Object.freeze({ width: 1280, height: 800 })
 const HIT_TARGET = 44
+const INPUT_FONT_SIZE = 16
 const EPSILON = 0.5
+// Input types that do not accept text; their font-size has nothing to do with the
+// iOS focus-zoom behaviour the inputFontSize assertion protects.
+const NON_TEXT_INPUT_TYPES = new Set(['button', 'checkbox', 'color', 'file', 'hidden', 'image', 'radio', 'range', 'reset', 'submit'])
 
 const PACK_ID_RE = /^[a-z][a-z0-9-]{0,63}$/
 const MANIFEST_FIELDS = Object.freeze(['description', 'id', 'name', 'schemaVersion', 'version'])
@@ -771,7 +775,10 @@ const FIXTURE = (optOut) => `<!DOCTYPE html>
     width: 28px; height: 28px; padding: 0; border: 0; border-radius: 6px;
     background: transparent; color: #9aa0ab; }
   .plugin-input { min-height: 32px; width: 100%; padding: 4px 8px; border: 1px solid #3a3d45;
-    border-radius: 8px; background: #16171b; color: inherit; font: inherit; }
+    border-radius: 8px; background: #16171b; color: inherit; font: inherit;
+    /* dsh-mobile sets text fields to 16px to avoid iOS focus zoom; the fixture
+       models the host so runtime.mobile.inputFontSize is measurable. */
+    font-size: 16px; line-height: 1.25; }
   .plugin-select { min-height: 32px; width: 100%; padding: 4px 8px; border: 1px solid #3a3d45;
     border-radius: 8px; background: #16171b; color: inherit; font: inherit; }
   .dshm-drawer { position: fixed; inset: 0 auto 0 0; width: 56px; background: #1a1c22;
@@ -900,6 +907,8 @@ function measurePage() {
     tag: element.tagName.toLowerCase(),
     role: element.getAttribute('role'),
     ariaLabel: element.getAttribute('aria-label'),
+    type: (element.getAttribute('type') ?? 'text').toLowerCase(),
+    fontSize: Number.parseFloat(getComputedStyle(element).fontSize),
     ...rect(element),
   }))
   // The built-in fixture uses desktop-first classes; a per-pack fixture only has
@@ -1160,7 +1169,7 @@ function validateBaseline(report, fixture, device, fixtureInfo) {
   return failures.length === 0
 }
 
-function checkMobileAssertions(report, baseline, after, packId, hasScript) {
+function checkMobileAssertions(report, baseline, after, packId, hasScript, fixtureInfo) {
   const layer = 'runtime'
   if (after.metrics.coarse !== true) {
     report.fail(layer, 'runtime.mobile.pointer', '390×844 环境没有报告粗指针，媒体查询不会生效')
@@ -1175,6 +1184,7 @@ function checkMobileAssertions(report, baseline, after, packId, hasScript) {
   const grew = []
   const buttons = after.metrics.controls.filter(control => control.tag === 'button' || control.role === 'button')
   const fields = after.metrics.controls.filter(control => control.tag !== 'button' && control.role !== 'button')
+  const customFixture = fixtureInfo !== null && fixtureInfo !== undefined && fixtureInfo.kind === 'custom'
   if (covers(report, 'hit-target')) {
     const buttonFailures = buttons.filter(control => Math.min(control.width, control.height) < HIT_TARGET - EPSILON)
     if (buttons.length === 0) {
@@ -1194,6 +1204,25 @@ function checkMobileAssertions(report, baseline, after, packId, hasScript) {
       report.pass(layer, 'runtime.mobile.input', `面板内 ${fields.length} 个输入控件高度 ≥ ${HIT_TARGET}px`)
     }
 
+    // iOS zooms the page when a focused text field's computed font-size is
+    // below 16px; dsh-mobile sets that on its own inputs, and a pack must not
+    // override it downwards. Non-text inputs (checkbox/radio/...) are not
+    // affected by the focus-zoom rule and are not asserted here.
+    const textFields = after.metrics.controls.filter(control =>
+      control.tag === 'textarea'
+      || (control.tag === 'input' && NON_TEXT_INPUT_TYPES.has(control.type) === false))
+    if (textFields.length === 0) {
+      report.skip(layer, 'runtime.mobile.inputFontSize', 'fixture 面板里没有可见文本输入（input/textarea）：跳过字号断言')
+    } else {
+      const smallFonts = textFields.filter(control => Number.isFinite(control.fontSize) === false || control.fontSize < INPUT_FONT_SIZE)
+      if (smallFonts.length > 0) {
+        const detail = smallFonts.map(control => `${control.tag}[${control.ariaLabel ?? control.type}] ${Number.isFinite(control.fontSize) ? `${control.fontSize}px` : '字号未知'}`).join('、')
+        report.fail(layer, 'runtime.mobile.inputFontSize', `面板内有 ${smallFonts.length}/${textFields.length} 个文本输入的 computed font-size 小于 ${INPUT_FONT_SIZE}px：${detail}`)
+      } else {
+        report.pass(layer, 'runtime.mobile.inputFontSize', `面板内 ${textFields.length} 个文本输入的 computed font-size ≥ ${INPUT_FONT_SIZE}px`)
+      }
+    }
+
     if (after.metrics.iconButton !== null && after.metrics.iconButton.width < HIT_TARGET - EPSILON) {
       report.fail(layer, 'runtime.mobile.iconButton', `图标按钮宽 ${fmt(after.metrics.iconButton.width)}，小于 ${HIT_TARGET}px（svg-only 按钮要 ≥ ${HIT_TARGET}×${HIT_TARGET}）`)
     } else if (after.metrics.iconButton !== null) {
@@ -1204,17 +1233,23 @@ function checkMobileAssertions(report, baseline, after, packId, hasScript) {
     report.skip(layer, 'runtime.mobile.button', 'catalog 未声明 hit-target：跳过面板命中下限')
   }
 
-  if (covers(report, 'width-reclaim')) {
+  // `width-reclaim` is an opt-in capability, but a directed fixture is a concrete
+  // page layout: any pack rule (including the 44px min-width floor) can overflow
+  // its 334px panel. So for custom fixtures the overflow pair always runs; the
+  // built-in fixture keeps the capability gate.
+  const reclaimGated = covers(report, 'width-reclaim')
+  if (reclaimGated || customFixture) {
     const panel = after.metrics.panel
+    const note = reclaimGated === false ? '（定向 fixture 无条件断言）' : ''
     if (panel !== null && panel.right > MOBILE_VIEWPORT.width + EPSILON) {
       report.fail(layer, 'runtime.mobile.panel.right', `面板右缘 x=${fmt(panel.right)}，超出 ${MOBILE_VIEWPORT.width}px 视口`)
     } else if (panel !== null) {
-      report.pass(layer, 'runtime.mobile.panel.right', `面板右缘 x=${fmt(panel.right)}（≤ ${MOBILE_VIEWPORT.width}px）`)
+      report.pass(layer, 'runtime.mobile.panel.right', `面板右缘 x=${fmt(panel.right)}（≤ ${MOBILE_VIEWPORT.width}px）${note}`)
     }
     if (after.metrics.scrollWidth > MOBILE_VIEWPORT.width + EPSILON) {
       report.fail(layer, 'runtime.mobile.overflow', `页面 scrollWidth=${after.metrics.scrollWidth}，横向被撑宽`)
     } else {
-      report.pass(layer, 'runtime.mobile.overflow', `页面 scrollWidth=${after.metrics.scrollWidth}（无横向溢出）`)
+      report.pass(layer, 'runtime.mobile.overflow', `页面 scrollWidth=${after.metrics.scrollWidth}（无横向溢出）${note}`)
     }
   } else {
     report.skip(layer, 'runtime.mobile.overflow', 'catalog 未声明 width-reclaim：跳过宽度回收')
@@ -1605,7 +1640,7 @@ async function checkPack(browser, pathArgument, skip, options) {
       mobile: { baseline: baselineMetrics.mobile, pack: mobile.metrics, optOut: optOut.metrics },
       desktop: { baseline: baselineMetrics.desktop, pack: desktop.metrics },
     }
-    checkMobileAssertions(report, baselineMobile, mobile, report.id, staticData.js !== null)
+    checkMobileAssertions(report, baselineMobile, mobile, report.id, staticData.js !== null, fixtureInfo)
     if (report.hostGate === true) checkHostGate(report, baselineMetrics.mobile, mobile)
     checkOptOut(report, baselineMobile, optOut)
     checkDesktop(report, baselineDesktop, desktop, options.desktop)
