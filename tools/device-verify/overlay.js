@@ -118,12 +118,74 @@
       ].join(';')
       document.body.append(panel)
     }
-    panel.textContent = lines.join('\n')
+    const pilotLines = Array.isArray(window.__dvPilot) ? window.__dvPilot : []
+    panel.textContent = [...lines, ...pilotLines].join('\n')
     return data
+  }
+
+  function panelSnapshot() {
+    const main = document.querySelector('[data-slot="main"]')
+    const nav = [...document.querySelectorAll('.dshm-panelNav :is(button, [role="button"])')].map(node => Math.round(node.getBoundingClientRect().height))
+    return {
+      panel: document.querySelector('.dshm-main')?.getAttribute('data-dsh-panel') ?? null,
+      touch: main === null ? null : touchMetrics(main),
+      nav,
+      floaters: getComputedStyle(document.documentElement).getPropertyValue('--dshm-floaters').trim(),
+    }
+  }
+
+  const sleep = milliseconds => new Promise(resolve => window.setTimeout(resolve, milliseconds))
+
+  /** Click a sidebar row by its visible text; this replaces blind adb taps. */
+  async function pilot() {
+    const results = ['pilot start']
+    const rows = () => [...document.querySelectorAll('[data-slot="sidebar"] *')]
+      .filter(element => element.children.length === 0 && element.textContent.trim() !== '')
+    const findRow = name => rows().find(element => element.textContent.trim() === name)
+    if (findRow('Context Insights') === undefined) {
+      const toggle = [...document.querySelectorAll('[data-slot="sidebar"] button, [data-slot="sidebar"] [role="button"]')]
+        .find(element => /expand|collapse|展开|收起/iu.test(element.getAttribute('aria-label') ?? element.textContent ?? ''))
+      if (toggle !== undefined) {
+        toggle.click()
+        await sleep(1500)
+        results.push('drawer expanded')
+      }
+    }
+    const labels = [...document.querySelectorAll('[data-slot="sidebar"] *')]
+      .filter(element => element.children.length === 0 && element.textContent.trim() !== '')
+      .map(element => element.textContent.trim())
+    results.push('texts: ' + JSON.stringify(labels.slice(0, 40)))
+    const aria = [...document.querySelectorAll('[data-slot="sidebar"] [aria-label]')].map(element => element.getAttribute('aria-label')).slice(0, 20)
+    results.push('aria: ' + JSON.stringify(aria))
+    const sidebarButtons = () => [...document.querySelectorAll('[data-slot="sidebar"] [aria-label]')]
+    const findButton = labels => sidebarButtons().find(element => labels.includes(element.getAttribute('aria-label')))
+    for (const [name, labels] of [['Context Insights', ['上下文洞察', 'Context Insights']], ['Todos', ['待办', 'Todos']], ['Plugins', ['插件', 'Plugins']]]) {
+      const button = findButton(labels)
+      if (button === undefined) { results.push(`${name}: aria button not found`); continue }
+      button.click()
+      await sleep(2500)
+      const snapshot = panelSnapshot()
+      const drawerRows = [...document.querySelectorAll('[data-slot="sidebar"] button')]
+        .map(node => Math.round(node.getBoundingClientRect().height))
+        .filter(height => height > 0)
+      results.push(`${name}: ${JSON.stringify({ ...snapshot, drawerRows })}`)
+      document.documentElement.setAttribute('data-dsh-adapt', 'off')
+      await sleep(350)
+      results.push(`${name} opt-out: ${JSON.stringify(panelSnapshot())}`)
+      document.documentElement.removeAttribute('data-dsh-adapt')
+      await sleep(200)
+      const back = document.querySelector('.dshm-panelNav :is(button, [role="button"])')
+      if (back !== null) { back.click(); await sleep(1600) }
+    }
+    results.push(`home: ${JSON.stringify(panelSnapshot())}`)
+    window.__dvPilot = results
+    render()
+    results.forEach(line => console.info('[pilot] ' + line))
   }
 
   window.__dshVerify = render
   render()
   const timer = window.setInterval(render, 1000)
   window.addEventListener('pagehide', () => window.clearInterval(timer), { once: true })
+  window.setTimeout(() => { void pilot() }, 2500)
 })()
