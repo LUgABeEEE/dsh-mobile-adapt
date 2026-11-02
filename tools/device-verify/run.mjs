@@ -89,25 +89,37 @@ function info(target) {
   return table
 }
 
+const OVERLAY_MARKER = 'dsh-verify-overlay'
+
+function isOverlay(path) {
+  try { return readFileSync(path, 'utf8').includes(OVERLAY_MARKER) } catch { return false }
+}
+
 function overlayOn() {
   mkdirSync(dirname(CUSTOM_JS), { recursive: true })
-  if (existsSync(CUSTOM_JS) && !existsSync(CUSTOM_BACKUP)) copyFileSync(CUSTOM_JS, CUSTOM_BACKUP)
+  // Only a real user file is worth restoring; a previous overlay must never become
+  // its own "backup", which would leave the overlay installed after `overlay off`.
+  if (!existsSync(CUSTOM_BACKUP) && existsSync(CUSTOM_JS) && !isOverlay(CUSTOM_JS)) copyFileSync(CUSTOM_JS, CUSTOM_BACKUP)
   copyFileSync(join(ROOT, 'tools', 'device-verify', 'overlay.js'), CUSTOM_JS)
   console.log(`overlay written to ${CUSTOM_JS}`)
   console.log('the gateway picks it up within ~2s; reopen or reload the mobile page')
 }
 
 function overlayOff() {
-  if (existsSync(CUSTOM_BACKUP)) {
+  const backupIsReal = existsSync(CUSTOM_BACKUP) && !isOverlay(CUSTOM_BACKUP)
+  if (backupIsReal) {
     copyFileSync(CUSTOM_BACKUP, CUSTOM_JS)
     rmSync(CUSTOM_BACKUP)
     console.log('overlay removed, previous mobile.js restored')
-  } else if (existsSync(CUSTOM_JS)) {
+    return
+  }
+  if (existsSync(CUSTOM_BACKUP)) rmSync(CUSTOM_BACKUP)
+  if (existsSync(CUSTOM_JS) && isOverlay(CUSTOM_JS)) {
     rmSync(CUSTOM_JS)
     console.log('overlay removed')
-  } else {
-    console.log('no overlay present')
+    return
   }
+  console.log(existsSync(CUSTOM_JS) ? 'mobile.js is not ours; left untouched' : 'no overlay present')
 }
 
 function shot(target, label) {

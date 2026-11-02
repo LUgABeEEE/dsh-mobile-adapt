@@ -111,7 +111,7 @@
       panel = document.createElement('div')
       panel.id = PANEL_ID
       panel.style.cssText = [
-        'position:fixed', 'z-index:2147483647', 'left:0', 'right:0', 'bottom:0',
+        'position:fixed', 'z-index:2147483647', 'left:0', 'right:0', 'top:0',
         'margin:0', 'padding:6px 8px', 'background:#052e16', 'color:#86efac',
         'font:11px/1.35 ui-monospace,monospace', 'white-space:pre-wrap',
         'pointer-events:none', 'box-shadow:0 -2px 8px rgba(0,0,0,.4)',
