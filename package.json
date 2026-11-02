@@ -7,6 +7,7 @@
   "scripts": {
     "list": "node tools/cli.mjs list",
     "check": "node tools/check-pack.mjs",
+    "bundle": "node tools/bundle.mjs",
     "prepublishOnly": "node --test && node scripts/check-bundle.mjs",
     "test": "node --test",
     "verify": "node --test && node scripts/check-bundle.mjs && node tools/cli.mjs list",

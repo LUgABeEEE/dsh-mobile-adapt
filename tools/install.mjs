@@ -24,10 +24,11 @@
  *
  * 用法：
  *   node tools/install.mjs pack <id> [--dry-run] [--yes]
+ *   node tools/install.mjs plugin <dir> [--dry-run] [--yes]   ← 安装 bundle 生成的单插件目录
  *   node tools/install.mjs --uninstall <id> [--dry-run] [--yes]
  */
-import { existsSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { cpSync, existsSync, mkdirSync, readFileSync, statSync } from 'node:fs'
+import { basename, dirname, join, resolve } from 'node:path'
 import {
   HOT_RELOAD_NOTE,
   ID_RE,
@@ -44,6 +45,7 @@ function usage() {
   return [
     '用法：',
     '  node tools/install.mjs pack <id> [--dry-run] [--yes]',
+    '  node tools/install.mjs plugin <dir> [--dry-run] [--yes]   （bundle 生成的单插件目录）',
     '  node tools/install.mjs --uninstall <id> [--dry-run] [--yes]',
     '',
     '  pack <id>            安装一张适配包到 $DSH_HOME/mobile-access/extensions/<id>',
@@ -107,7 +109,7 @@ function parseArgs(argv) {
     if (argument === '--dry-run') options.dryRun = true
     else if (argument === '--yes') options.yes = true
     else if (argument === '--help' || argument === '-h') options.help = true
-    else if (argument === 'pack' || argument === 'uninstall') {
+    else if (argument === 'pack' || argument === 'uninstall' || argument === 'plugin') {
       if (options.mode !== null) failUsage(`只能有一个动作，收到 ${options.mode} 与 ${argument}`)
       options.mode = argument
     } else if (argument === '--uninstall') {
@@ -117,6 +119,12 @@ function parseArgs(argv) {
   }
   if (options.help) return options
   if (options.mode === null) failUsage('缺少动作（pack <id> 或 --uninstall <id>）')
+  if (options.mode === 'plugin') {
+    if (rest.length !== 1) failUsage(`需要且只需要一个目录，收到 ${rest.length === 0 ? '0 个' : rest.join(' ')}`)
+    options.dir = resolve(rest[0])
+    if (options.dryRun && options.yes) failUsage('--dry-run 与 --yes 不能同时使用')
+    return options
+  }
   if (rest.length !== 1) failUsage(`需要且只需要一个包 id，收到 ${rest.length === 0 ? '0 个' : rest.join(' ')}`)
   options.id = rest[0]
   if (options.dryRun && options.yes) failUsage('--dry-run 与 --yes 不能同时使用')
@@ -217,10 +225,62 @@ function uninstall(options) {
   console.log(`回滚位置：${result.disabled}`)
 }
 
+
+const EXTENSION_FIELDS = ['schemaVersion', 'id', 'name', 'version', 'description']
+
+/** 只安装「单插件目录」：5 字段 extension.json、目录名等于 id、目标不存在。 */
+function installPluginDir(options) {
+  const home = resolveDshHome()
+  const execute = options.yes === true
+  if (existsSync(options.dir) === false || statSync(options.dir).isDirectory() === false) fail(`不是目录：${options.dir}`)
+  let manifest
+  try {
+    manifest = JSON.parse(readFileSync(join(options.dir, 'extension.json'), 'utf8'))
+  } catch (error) {
+    fail(`读不到 ${join(options.dir, 'extension.json')}：${error.message}`)
+  }
+  const keys = Object.keys(manifest ?? {}).sort()
+  if (!Array.isArray(keys) || keys.length !== EXTENSION_FIELDS.length
+    || EXTENSION_FIELDS.some(field => !keys.includes(field))) {
+    fail(`extension.json 必须且只能有 ${EXTENSION_FIELDS.join(' / ')}，实际：${keys.join(' / ')}`)
+  }
+  if (manifest.schemaVersion !== 1) fail(`extension.json schemaVersion 必须是 1，实际 ${String(manifest.schemaVersion)}`)
+  if (typeof manifest.id !== 'string' || ID_RE.test(manifest.id) === false) fail(`插件 id 不合法：${String(manifest.id)}`)
+  if (basename(options.dir) !== manifest.id) fail(`目录名 ${basename(options.dir)} 与插件 id ${manifest.id} 不一致`)
+  const target = join(home, 'mobile-access', 'extensions', manifest.id)
+  const exists = existsSync(target)
+  console.log('dsh-adapt-packs · 安装单插件（' + (execute ? '写入' : 'dry-run') + '）')
+  console.log('')
+  console.log(`插件：    ${manifest.id} ${manifest.version}`)
+  console.log(`来源：    ${options.dir}`)
+  console.log(`DSH_HOME：${home}`)
+  console.log(`目标：    ${target}`)
+  console.log(`目标状态：${exists ? '已存在（--yes 会拒绝覆盖）' : '不存在'}`)
+  console.log('')
+  console.log('动作：')
+  console.log(`  ${mkdirCommand(dirname(target))}`)
+  console.log(`  ${copyCommand(options.dir, target)}`)
+  console.log('')
+  console.log('回滚（移走目录，可恢复）：')
+  console.log(`  node tools/install.mjs --uninstall ${manifest.id} --yes`)
+  console.log('')
+  if (execute === false) {
+    console.log('dry-run：未写入任何文件。确认无误后加 --yes 执行。')
+    return
+  }
+  if (exists) fail(`目标已存在，拒绝覆盖：${target}\n先回滚：node tools/install.mjs --uninstall ${manifest.id} --yes`)
+  mkdirSync(dirname(target), { recursive: true })
+  cpSync(options.dir, target, { recursive: true })
+  console.log(`已安装 ${manifest.id} 到 ${target}`)
+  console.log('')
+  console.log(HOT_RELOAD_NOTE)
+}
+
 const options = parseArgs(process.argv.slice(2))
 if (options.help) {
   console.log(usage())
   process.exit(0)
 }
 if (options.mode === 'pack') install(options)
+else if (options.mode === 'plugin') installPluginDir(options)
 else uninstall(options)
