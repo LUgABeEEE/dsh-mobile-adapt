@@ -4,13 +4,15 @@
  * 本包自有的 data-dshm-context-panel="1"（打在面板根上），CSS 只在它下面生效。
  *
  * 为什么需要这层桥：
- *   - dsh-context 0.79.0 的主面板根是 .lc-root，**没有** data-dsh-* 根标记
+ *   - dsh-context 0.79.0 的主面板根是 `SECTION.lc-ov-page`（2026-11-02 在真实
+ *     0.8.1 宿主 + dsh-context 0.79.0 的 live DOM 上复核过），**没有** data-dsh-* 根标记
  *     （npm 包 lib/client.js 里 grep `data-dsh` 0 命中；上游把「加 data-dsh-context-root」
  *     列为待办，见本仓库 docs/首批高星适配清单.md §4.3）；
  *   - 它自己的 `data-lc-*` 属性命名空间（趋势卡 `data-lc-trend`、条形 `data-lc-bars`、
- *     提示 `data-lc-tip`、热力 `data-lc-current` / `data-lc-key`、搜索清除
- *     `data-lc-clearable`）是稳定、可观测的**定位**信号；本包只读这些属性，
- *     不写、不改，也不依赖 .lc-* 类名；
+ *     提示 `data-lc-tip` / `data-lc-tip-side`、热力 `data-lc-current` / `data-lc-key`、搜索清除
+ *     `data-lc-clearable`）是稳定、可观测的**定位**信号；live DOM 上 `data-lc-tip`
+ *     就落在 `.lc-ov-page` 子树里，`closest('[data-slot="main"] > *')` 能落到面板根。
+ *     本包只读这些属性，不写、不改，也不依赖 .lc-* 类名；
  *   - 宿主的 `data-dsh-panel` 由宿主维护（dsh-mobile #319 起），本包只读不写。
  *
  * 幂等 / 清理：activate 不创建 <style>（CSS 由宿主注入）；重复 activate 先执行上一代

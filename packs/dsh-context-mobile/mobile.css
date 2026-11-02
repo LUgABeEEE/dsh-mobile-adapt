@@ -1,6 +1,7 @@
-/* dsh-context-mobile · 上下文 / 成本主面板的手机触控下限
+/* dsh-context-mobile · 上下文 / 成本主面板的手机触控下限（0.8.x 兜底）
  *
- * 目标插件：dsh-context（主面板入口 conversation.view 的「上下文」tab；面板根 .lc-root）
+ * 目标插件：dsh-context（主面板入口 conversation.view 的「上下文」tab；真实面板根是
+ * `SECTION.lc-ov-page`，见 2026-11-02 复核的 live DOM 记录）
  * 实测版本：0.79.0（npm tarball 与安装副本 client.js 逐字节一致）
  *
  * 这个面板自己已经做了容器查询与省略号（overview.css:24 / base.css:33），手机上的
@@ -8,8 +9,17 @@
  *   - 粒度按钮 .lc-gran-btn：font-size 11px / line-height 1 / padding 3px 8px → 高约 17–22px（base.css:42）
  *   - 「设置」胶囊 .lc-ov-settings：12px/18px + padding 3px 12px → 高约 24px（overview.css:8）
  *   - 余额/更新胶囊 .lc-ov-balance：12px/18px + padding 2px 10px → 高约 22px（overview.css:11）
- *   - 搜索框 .lc-searchbox input 没有自己的 font-size（base.css:49-50）→ 继承 13px，iOS 聚焦会放大
- *   - 自定义可点行（role="button"）与纯图标按钮只有 20–24px
+ *   - 纯图标按钮（搜索清除）只有 15–20px；自定义可点行（role="button"）约 20px
+ *
+ * release / main 两条线（2026-11-02 复核后修正）：
+ *   - dsh-mobile **0.8.0** 没有插件面板地板；本包在 `.dshm-main:not([data-dsh-panel])`
+ *     下给 44px 高度 + 宽度下限与 touch-action，这是它唯一生效的发布线。
+ *   - dsh-mobile **0.8.1**（含 #319 后续补丁 7f4ea80）已经给
+ *     `min-width:44px;min-height:44px`（`lib/mobile-layout.js:507`）与 `touch-action`，
+ *     并且 0.8.0/0.8.1 都给输入框 `font-size:max(16px,1em,var(--dsh-content-font-size,1em))`
+ *     （`lib/mobile-layout.js:459`）。所以宿主写 `data-dsh-panel` 时本包全部退让——
+ *     **不再声明 min-width / 16px 字号是「宿主没有的东西」**，也不覆盖用户的
+ *     `--dsh-content-font-size`。
  *
  * 作用域：
  *   - 面板根由 mobile.js 打上本包自有的 data-dshm-context-panel="1"（dsh-context 0.79.0
@@ -18,66 +28,29 @@
  *     不点名 .lc-* 私有类名；
  *   - `<html data-dsh-adapt="off">` 时全部失效。
  *
- * release / main 两条线（与 core-panel 同一套纪律）：
- *   - 高度地板只在 `.dshm-main:not([data-dsh-panel])` 下给（dsh-mobile 0.8.x：宿主还没有
- *     #319 的 44px 地板，本包是面板内唯一的 44px 来源）；
- *   - 0.8.1+ 宿主自己写 data-dsh-panel 并给面板内 button/[role=button]/select/input 44px
- *     高度地板，本包的高度规则退让，只保留宿主**没有**的两项：
- *       (a) min-width:44（图标按钮宽度；宿主只给高度）；
- *       (b) 输入框 font-size:16px（宿主在专用页已给 16px，但 stock web / 旧宿主没有）。
- *   - 所以本包在两条线上都有实际作用，不是纯重复。
- *
  * 不做的事：
- *   - hover-only 提示（role="tooltip" / data-lc-tip）在触屏**不可达**是交互问题，CSS 造不出
- *     点击入口；这里只保证它一旦显示时不溢出视口（见最后一条），触达仍需上游加 tap 入口。
- *   - 热量格子（role="gridcell"）是数据单元而不是控件，不抬到 44px——那会把图撑坏。
+ *   - hover-only 提示（role="tooltip" / data-lc-tip）在触屏**不可达**是交互问题，CSS
+ *     造不出点击入口；本包不碰它的宽度/位置（插件自己的 `min(320px,50vw)` 更保守）。
+ *   - 热量格子（role="gridcell"）是数据单元而不是控件，不抬到 44px。
+ *   - 输入框字号：宿主两个版本都已给 16px，重复设置还可能压低用户字号偏好。
  */
 
 @media (pointer: coarse) {
-  /* ── 高度地板（0.8.x 发布线兜底；0.8.1+ 宿主接管后自动退让） ───────────── */
+  /* 高度 + 宽度下限：只在宿主没有 data-dsh-panel 的发布线（0.8.x）上给。 */
   :root:not([data-dsh-adapt="off"]) .dshm-main:not([data-dsh-panel]) [data-slot="main"] [data-dshm-context-panel="1"]
-    :where(button, [role="button"], [role="tab"], select) {
+    :where(button, [role="button"], select) {
     min-height: 44px !important;
-  }
-
-  :root:not([data-dsh-adapt="off"]) .dshm-main:not([data-dsh-panel]) [data-slot="main"] [data-dshm-context-panel="1"]
-    :where(input:not([type="checkbox"]):not([type="radio"]), textarea) {
-    min-height: 44px !important;
-  }
-
-  /* ── 宽度：宿主（含 #319）只给高度，纯图标按钮仍是 20–24px 宽 ─────────── */
-  :root:not([data-dsh-adapt="off"]) [data-slot="main"] [data-dshm-context-panel="1"]
-    :where(button, [role="button"], [role="tab"]):not([role="switch"]):not([role="checkbox"]) {
     min-width: 44px !important;
   }
 
-  /* ── 输入框字号：避免 iOS 聚焦自动放大（stock web / 旧宿主没有这条） ───── */
-  :root:not([data-dsh-adapt="off"]) [data-slot="main"] [data-dshm-context-panel="1"]
+  :root:not([data-dsh-adapt="off"]) .dshm-main:not([data-dsh-panel]) [data-slot="main"] [data-dshm-context-panel="1"]
     :where(input:not([type="checkbox"]):not([type="radio"]), textarea) {
-    font-size: max(16px, 1em) !important;
+    min-height: 44px !important;
   }
 
-  /* ── 去掉 300ms 双击缩放等待 ─────────────────────────────────────────── */
-  :root:not([data-dsh-adapt="off"]) [data-slot="main"] [data-dshm-context-panel="1"]
-    :where(button, [role="button"], [role="tab"], select, input, textarea) {
+  /* 去掉 300ms 双击缩放等待；0.8.1+ 宿主已给同一规则，这里只做 0.8.x 兜底。 */
+  :root:not([data-dsh-adapt="off"]) .dshm-main:not([data-dsh-panel]) [data-slot="main"] [data-dshm-context-panel="1"]
+    :where(button, [role="button"], a) {
     touch-action: manipulation;
-  }
-
-  /* ── 本包自己加宽之后的按钮组允许换行 ───────────────────────────────────
-     粒度/区间选择器是 role="group" 的 flex 行（contextView.tsx:631、
-     overviewPanel.tsx:192/259/324/337）。44px 宽的按钮在 390px 面板里可能放不下，
-     允许换行比让面板出现横向滚动更安全；不改 DOM、不改顺序。 */
-  :root:not([data-dsh-adapt="off"]) [data-slot="main"] [data-dshm-context-panel="1"] [role="group"] {
-    flex-wrap: wrap;
-    row-gap: 6px;
-  }
-
-  /* ── 提示内容收敛（不解决触达，只解决显示时溢出） ───────────────────────
-     role="tooltip" 的提示条是绝对定位的；手机上它一旦出现，长文本会顶出面板。
-     这里只限制宽度、允许折行，不改变它何时出现。 */
-  :root:not([data-dsh-adapt="off"]) [data-slot="main"] [data-dshm-context-panel="1"] [role="tooltip"] {
-    max-width: min(320px, calc(100vw - 32px));
-    white-space: normal;
-    overflow-wrap: anywhere;
   }
 }

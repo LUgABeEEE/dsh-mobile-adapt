@@ -52,7 +52,7 @@ is "adaptation content stays here, the host gets interfaces only".
 | [`shell-chrome`](packs/shell-chrome/) | the shell itself | the open drawer's sidebar rows (36 → 44px); the "back to conversation" bar becomes a rise-only floor that never shrinks the host's own 48px |
 | [`floaters`](packs/floaters/) | floating widgets | measures bottom-right fixed widgets, reserves their height, so the last rows stop hiding underneath |
 | [`dshmarket-mobile`](packs/dshmarket-mobile/) | the plugin market panel | a 44px touch floor for `dshmarket` 1.73.x: buttons, icon buttons and the search field, scoped to `[data-dsh-market-root]` |
-| [`dsh-context-mobile`](packs/dsh-context-mobile/) | the context/cost panel | a 44px touch floor for `dsh-context` 0.79.x: granularity buttons, icon buttons, search/select and custom `role=button` rows; located through the plugin's own `data-lc-*` attributes, scoped by this pack's marker |
+| [`dsh-context-mobile`](packs/dsh-context-mobile/) | the context/cost panel | a 44px touch floor for `dsh-context` 0.79.x on **dsh-mobile 0.8.x only** (0.8.1+ provides the same floor and the pack backs off): granularity buttons, icon-only clear button, search/select and custom `role=button` rows; located through the plugin's own `data-lc-*` attributes, scoped by this pack's marker |
 | [`host-service-panel-mobile`](packs/host-service-panel-mobile/) | the host-observability panel | narrow-screen layout and a 44px touch floor for `dsh-host-service-panel` 0.7.x, scoped to `[data-dsh-hsp-root]` |
 
 Every pack is **experimental** and **off by default**. `catalog.json` records, per pack, what has actually been verified and what has not — the `evidence` field is meant to be read before trusting one.
@@ -165,7 +165,7 @@ Each pack stops applying entirely — panel spacing returns to its own values, s
 | Fixture measurement: 390×844 coarse pointer, 1280×800 fine pointer zero-regression, opt-out | ✅ every pack (`node tools/check-pack.mjs`) |
 | Fixture measurement on Windows 11 + Chromium (`node tools/check-pack.mjs --desktop`) | ✅ every pack (2026-10-31, earlier suite: 87 passed / 0 failed / 8 skipped; the suite changed since — CI on `windows-latest` runs the current one) |
 | Real runtime on **dsh-mobile 0.8.0** | ✅ measured on the real gateway (390×844, coarse pointer, Plugins panel) — see `实测-0.8.0-20261031.md` in the workspace |
-| Real runtime on **0.8.1+ (contains #319)** | ⏳ shipped 2026-11-01; our gate (`:not([data-dsh-panel])`) backs the height floor off once the host writes the marker — verified by `check-pack` host-probe on a synthetic host state, **not re-measured on a real 0.8.1 host** (this box still runs 0.8.0) |
+| Real runtime on **0.8.1 (contains #319)** | ⏳ shipped 2026-11-01; our gate (`:not([data-dsh-panel])`) backs the height floor and root-width clamp off once the host writes the marker — verified by `check-pack` host-probe with the host's own 0.8.1 rules injected, **not re-measured through a real 0.8.1 install**. This box now runs 0.8.1; the device run below still dates from the 0.7.1 app |
 | Real runtime on **0.7.1** | ✅ historically (2026-10-31 earlier run); the 122px / 36→44px numbers were the same as 0.8.0 |
 | Physical device | ✅ Android App measured (2026-11-01, Redmi K90 Max / Android 17 / dsh-mobile App 0.7.1): with `core-panel` installed (or with the full set) the slot reaches 141/44/0 where the no-pack baseline is 141/14/141 (`dshmarket-mobile` alone only fixes the market root); real `env(safe-area-inset-*)` is 0 because this App is **not** edge-to-edge; the soft keyboard shrinks the viewport 786→472. See [`docs/真机验证.md`](docs/真机验证.md). iOS, thumb-reach feel and edge-to-edge apps remain unverified |
 
@@ -178,10 +178,10 @@ Each pack stops applying entirely — panel spacing returns to its own values, s
 | host writes `data-dsh-panel` | **no** (grep: 0 hits) | yes, on `.dshm-main` |
 | 44px hit floor for plugin panel controls | **no** (94/94 controls < 44px measured) | yes, host-provided |
 | panel root width clamp | no | yes |
-| icon-only button `min-width` | no | **no** |
+| icon-only button `min-width` | no | **yes** (0.8.1 floors both width and height) |
 | bottom safe area on panel pages | no | **no** |
 
-`core-panel` therefore gates its height floor and width clamp on `.dshm-main:not([data-dsh-panel])`: on 0.8.x it is the only source, and on a host that owns that attribute it steps aside instead of duplicating (and never writes the host's attribute — it keeps its own `data-dshm-adapt-panel`). `check-pack` proves the gate with a simulated host-owned attribute (`runtime.hostGate.*`).
+`core-panel` therefore gates its height floor and width clamp on `.dshm-main:not([data-dsh-panel])`: on 0.8.0 it is the only source, and on 0.8.1 (which owns that attribute) it steps aside instead of duplicating (and never writes the host's attribute — it keeps its own `data-dshm-adapt-panel`). Its `min-width:44` rule stays as the 0.8.0 fallback; 0.8.1 provides the same value, so on 0.8.1 it is a same-value safety net rather than a unique contribution. `check-pack` proves the gate with the host's own 0.8.1 rules injected (`runtime.hostGate.*`).
 
 That is why the packs stay `experimental` rather than `candidate`. Measuring is a separate problem, and there is a tool for it: [`dsh-ui-lab`](https://github.com/LUgABeEEE/dsh-ui-lab) opens a DSH surface at real device proportions, captures a panel, and gates a matrix run on a pixel diff.
 

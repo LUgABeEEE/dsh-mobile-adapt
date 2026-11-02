@@ -5,20 +5,28 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>dsh-context-mobile · directed fixture</title>
 <!--
-  Directed fixture for packs/dsh-context-mobile.
+  Directed fixture for packs/dsh-context-mobile. Structure/geometry stand-in for the
+  dsh-context 0.79.0 main view ("Context Insights", conversation.view), not a pixel
+  capture. Every class below was checked to exist in the published bundle
+  (npm lib/client.js sha256 bf2295d8…304f69); styles are simplified re-creations of
+  the source CSS with the same box metrics. See the pack README §3 for the capture
+  method, control counts and the fixture↔real-page difference table.
 
-  It is a hand-built reduction of dsh-context 0.79.0's main view ("上下文" tab,
-  conversation.view), not a pixel capture: the classes, control sizes and the
-  `data-lc-*` anchors below are taken from the published source:
-    src/client/index.ts:64-65            conversation.view registration
-    src/client/components/contextView.tsx:567,625,631   .lc-root, data-lc-trend, role=group
-    src/client/components/overviewPanel.tsx:192,259,324,337   role=group rows
-    src/client/components/statsContext.tsx:403,532      role=tooltip
-    src/client/styles/base.css:42,49-50                 .lc-gran-btn, .lc-searchbox input
-    src/client/styles/overview.css:8,11                 .lc-ov-settings / .lc-ov-balance
-  Class names stay here only to reproduce the structure; the pack's CSS never
-  names them (it scopes on the pack's own data-dshm-context-panel marker, which
-  mobile.js applies when it sees a data-lc-* signal).
+  Source anchors (GitHub main = 0.79.0):
+    src/client/index.ts:64-65                     conversation.view registration
+    src/client/components/contextView.tsx:567,625 .lc-root / data-lc-trend
+    src/client/components/overviewPanel.tsx:192   role=group rows
+    src/client/styles/base.css:42,49-50           .lc-gran-btn / .lc-searchbox input
+    src/client/styles/overview.css:8,11,18        .lc-ov-settings / .lc-ov-balance / hovertip
+  Known differences from the real page: no href attributes (fixture contract),
+  the search/select row uses an unclassed flex wrapper (the real plugin wraps them in
+  its own toolbar class, which the pack must not depend on),
+  no live data, simplified padding/spacing; the real page also has a 24px
+  `<a href>` balance link the pack does not cover.
+
+  The fixture deliberately models **0.8.0** (no host panel floor, so the pack's own
+  rules are measurable) but keeps the host's 16px input font-size (both 0.8.0 and
+  0.8.1 set it) so the inputFontSize assertion can prove the pack does not shrink it.
 
   No script, no href/src, no external or inline-resource references (check-pack contract).
 -->
@@ -33,15 +41,18 @@
   .dshm-mainContent { position: relative; flex: 1; min-width: 0; min-height: 0; overflow: hidden; }
   [data-slot="main"] { display: contents; }
 
-  /* dsh-context main view — desktop-ish density, like the real first render. */
-  .lc-root { display: flex; flex-direction: column; gap: 10px; padding: 12px; height: 100%; overflow-y: auto; }
-  .lc-pagehead { display: flex; align-items: center; gap: 6px; }
+  /* dsh-context main view — real root is SECTION.lc-ov-page. */
+  .lc-ov-page { display: flex; flex-direction: column; gap: 10px; width: 100%; height: 100%;
+    min-width: 0; min-height: 0; padding: 12px; overflow: hidden; container: lc-ov / inline-size; }
+  .lc-ov-pagehead { display: flex; align-items: center; gap: 6px; min-width: 0; }
   .lc-ov-pagetitle { flex: 1 1 auto; min-width: 0; margin: 0; font-size: 20px; line-height: 28px; font-weight: 500; }
   .lc-ov-settings { flex: none; display: inline-flex; align-items: center; gap: 6px;
     border: 1px solid #d5d7dd; background: #fff; border-radius: 999px; padding: 3px 12px;
-    font: inherit; font-size: 12px; line-height: 18px; color: #5b6068; white-space: nowrap; }
-  .lc-iconbtn { flex: none; display: inline-flex; align-items: center; justify-content: center;
-    width: 22px; height: 22px; padding: 0; border: 0; background: transparent; color: #5b6068; }
+    font: inherit; font-size: 12px; line-height: 18px; color: #5b6068; white-space: nowrap; cursor: pointer; }
+  .lc-ov-balance { flex: none; display: inline-flex; align-items: center; gap: 6px;
+    max-width: 100%; padding: 2px 10px; border-radius: 999px; border: 1px solid #d5d7dd;
+    background: #fff; font-size: 12px; line-height: 18px; color: inherit; white-space: nowrap;
+    text-decoration: none; }
   .lc-ov-kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
   .lc-stat { display: flex; flex-direction: column; gap: 2px; min-width: 0;
     background: #fff; border: 1px solid #e3e4e8; border-radius: 8px; padding: 6px; }
@@ -54,24 +65,28 @@
   .lc-card-title-text { flex: none; white-space: nowrap; font-weight: 600; }
   .lc-gran { display: flex; gap: 4px; margin-left: auto; }
   .lc-gran-btn { border: 0; background: transparent; color: #5b6068; font-size: 11px;
-    line-height: 1; padding: 3px 8px; border-radius: 5px; font-family: inherit; white-space: nowrap; }
+    line-height: 1; padding: 3px 8px; border-radius: 5px; font-family: inherit; white-space: nowrap; cursor: pointer; }
   .lc-gran-btn.lc-gran-on { background: #eceef2; color: #1f2328; }
   .lc-bars { display: flex; align-items: flex-end; gap: 3px; height: 72px; margin-top: 8px; }
   .lc-bar { flex: 1 1 0; min-width: 0; border-radius: 2px 2px 0 0; background: #9aa4b2; }
-  .lc-toolbar { display: flex; align-items: center; gap: 8px; }
-  .lc-searchbox { position: relative; display: flex; flex: 1; min-width: 80px; }
-  .lc-searchbox > input { flex: 1 1 0; min-width: 0; min-height: 28px; padding: 4px 8px;
-    border: 1px solid #d5d7dd; background: #fff; border-radius: 6px; outline: none;
-    font: inherit; font-size: 13px; }
-  .lc-ov-sort { min-height: 28px; padding: 3px 8px; border: 1px solid #d5d7dd;
+  .lc-searchbox { position: relative; display: flex; flex: 1 1 auto; min-width: 120px; align-items: center; }
+  .lc-searchbox > input { flex: 1 1 0; min-width: 0; padding: 4px 8px; border: 1px solid #d5d7dd;
+    background: #fff; border-radius: 6px; outline: none; font: inherit; font-size: 16px; line-height: 1.4; }
+  .lc-clearable { flex: none; display: inline-flex; align-items: center; justify-content: center;
+    width: 20px; height: 20px; margin-left: -28px; padding: 0; border: 0; background: transparent;
+    color: #5b6068; font-size: 14px; line-height: 1; cursor: pointer; }
+  .lc-settings-select { min-height: 28px; padding: 3px 8px; border: 1px solid #d5d7dd;
     border-radius: 6px; background: #fff; font: inherit; font-size: 13px; }
   .lc-sl { display: flex; flex-direction: column; gap: 2px; }
   .lc-sl-row { display: flex; align-items: center; justify-content: space-between; gap: 8px;
     padding: 3px 6px; border-radius: 6px; font-size: 12px; cursor: pointer; }
   .lc-sl-row:nth-child(odd) { background: #fff; }
   .lc-sl-pct { flex: none; font-weight: 700; font-variant-numeric: tabular-nums; }
-  .lc-tip { position: absolute; left: 24px; top: 340px; z-index: 5; padding: 4px 8px;
-    border-radius: 6px; background: #1f2328; color: #fff; font-size: 11px; white-space: nowrap; }
+  /* Real hovertip is position:fixed with max-width:min(320px,50vw) (overview.css:18). */
+  .lc-tip { position: absolute; padding: 4px 8px; border-radius: 6px; background: #1f2328;
+    color: #fff; font-size: 11px; }
+  .lc-hovertip { position: fixed; left: 16px; bottom: 16px; z-index: 5;
+    max-width: min(320px, 50vw); white-space: normal; }
 </style>
 </head>
 <body>
@@ -80,15 +95,11 @@
     <div class="dshm-panelNav"><button type="button">‹ 返回会话</button></div>
     <div class="dshm-mainContent">
       <div data-slot="main">
-        <div class="lc-root">
-          <div class="lc-pagehead">
+        <section class="lc-ov-page">
+          <div class="lc-ov-pagehead">
             <h1 class="lc-ov-pagetitle">上下文</h1>
+            <a class="lc-ov-balance" role="link">DeepSeek balance</a>
             <button type="button" class="lc-ov-settings">设置</button>
-            <button type="button" class="lc-iconbtn" aria-label="刷新">
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                <path d="M13 8a5 5 0 1 1-1.5-3.5M13 2v3h-3" stroke="currentColor" stroke-width="1.4"></path>
-              </svg>
-            </button>
           </div>
 
           <div class="lc-ov-kpis">
@@ -117,11 +128,12 @@
             </div>
           </section>
 
-          <div class="lc-toolbar">
+          <div style="display: flex; align-items: center; gap: 8px">
             <div class="lc-searchbox">
               <input class="lc-ov-search" type="search" placeholder="搜索分类">
+              <button type="button" class="lc-clearable" aria-label="清除输入">×</button>
             </div>
-            <select class="lc-ov-sort" aria-label="排序">
+            <select class="lc-settings-select" aria-label="排序">
               <option>按 token</option>
               <option>按占比</option>
             </select>
@@ -130,11 +142,10 @@
           <div class="lc-sl">
             <div class="lc-sl-row" role="button" tabindex="0"><span>system</span><span class="lc-sl-pct">32%</span></div>
             <div class="lc-sl-row" role="button" tabindex="0"><span>tools</span><span class="lc-sl-pct">21%</span></div>
-            <div class="lc-sl-row" role="button" tabindex="0"><span>assistant</span><span class="lc-sl-pct">18%</span></div>
           </div>
 
-          <span class="lc-tip" role="tooltip" data-lc-tip>缓存命中率 = 命中 token / 输入 token</span>
-        </div>
+          <span class="lc-tip lc-hovertip" role="tooltip" data-lc-tip>缓存命中率 = 命中 token / 输入 token</span>
+        </section>
       </div>
     </div>
   </main>

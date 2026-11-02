@@ -54,9 +54,9 @@
       "version": "0.79.0",
       "verdict": "pack",
       "category": "usage",
-      "summary": "主面板已适配触控下限（dsh-context-mobile，capabilities 仅 hit-target）；hover-only 提示在触屏仍不可达，仍需上游加 tap 入口。",
-      "mobile": "粒度按钮 11px 字号 / 约 17–22px 高（base.css:42）、设置胶囊约 24px（overview.css:8）、搜索框继承 13px（base.css:49-50）；定向 fixture 390×844 装包后按钮/行 44px、输入 44px + 16px。真实专用页未量。",
-      "evidence": "源码取证（npm dsh-context@0.79.0，client.js sha256 与安装副本一致；结构行号取 GitHub src/）+ check-pack 定向 fixture 全 PASS（42/0/1）；真机、专用页、composer overlay 未验证。",
+      "summary": "0.8.x 的触控下限兜底（dsh-context-mobile，capabilities 仅 hit-target）；0.8.1+ 宿主已自带同值地板，包自动退让。hover-only 提示仍需上游加 tap 入口。",
+      "mobile": "粒度按钮 11px 字号 / 约 17–22px 高（base.css:42）、设置胶囊约 24px（overview.css:8）、纯图标清除按钮 20px、搜索框约 32px（宿主给 16px 字号）；真实页还有 24px 的 <a href> 余额链接（包不覆盖）。定向 fixture 390×844 装包后按钮/行 44px、输入/下拉 44px。真实页未装包实测。",
+      "evidence": "源码取证（npm dsh-context@0.79.0，client.js sha256 与安装副本一致；结构行号取 GitHub src/）+ live DOM 结构核对（verifier，0.8.1 + 0.79.0，面板根 SECTION.lc-ov-page、data-lc-tip 信号可落到根）+ check-pack 定向 fixture 42/0/1 与 host-probe 4 条断言；真机、专用页装包实测未做。",
       "links": {
         "repo": "https://github.com/bowenliang123/dsh-context",
         "npm": "dsh-context"
@@ -87,7 +87,7 @@
     },
     {
       "dshMobile": "0.8.1 起",
-      "summary": "main-slot 面板自带 coarse-pointer 控件下限（44px），带 root opt-out，排除 switch / range / 嵌套 opt-out 控件；精指针几何不变。core-panel 的门阀会让高度地板退让，只保留宿主不提供的 min-width。",
+      "summary": "main-slot 面板自带 coarse-pointer 控件下限（min-width 44px + min-height 44px），带 root opt-out，排除 switch / range / 嵌套 opt-out 控件；精指针几何不变。core-panel 的门阀会让高度地板与面板根宽度收口退让；它的 min-width 规则保留为 0.8.0 的兜底（0.8.1 上同值，不再声称独有）。",
       "source": "https://github.com/saya-ch/dsh-mobile/pull/319",
       "evidence": "dsh-mobile 0.8.1 changelog（2026-11-01）；本仓库的 host-probe 在合成宿主状态下验证过退让，真实 0.8.1 运行时未实测。"
     }

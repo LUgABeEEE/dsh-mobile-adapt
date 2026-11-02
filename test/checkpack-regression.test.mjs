@@ -15,7 +15,7 @@
 import { spawnSync } from 'node:child_process'
 import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, join, resolve } from 'node:path'
+import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import assert from 'node:assert/strict'
 import test from 'node:test'
@@ -24,6 +24,7 @@ const HERE = dirname(fileURLToPath(import.meta.url))
 const REPO = resolve(HERE, '..')
 const EXAMPLE = join(REPO, 'docs', 'examples', 'fixture-pack')
 const CHECKER = join(REPO, 'tools', 'check-pack.mjs')
+const CONTEXT_PACK = join(REPO, 'packs', 'dsh-context-mobile')
 const REQUIRE_BROWSER = process.env.CHECKPACK_REGRESSION_REQUIRE_BROWSER === '1'
 const RUN_TIMEOUT_MS = 180_000
 
@@ -130,5 +131,75 @@ test('directed fixture: a widened document fails runtime.mobile.overflow', { ski
     assert.equal(result.status, 1, `check-pack should exit 1 for a failing directed fixture\nstdout: ${result.stdout?.slice(0, 2000)}\nstderr: ${result.stderr?.slice(0, 2000)}`)
     const assertion = failedAssertion(result.payload, 'runtime.mobile.overflow')
     assert.match(assertion.message, /scrollWidth/)
+  })
+})
+
+/**
+ * Copy a real pack under its own basename (so its catalog entry still applies) and
+ * append CSS to mobile.css. Used for "the gate must actually be proven" regressions.
+ */
+function withMutatedPack(sourceDir, cssAppend, fn) {
+  const root = mkdtempSync(join(tmpdir(), 'checkpack-hostgate-'))
+  const packDir = join(root, basename(sourceDir))
+  try {
+    cpSync(sourceDir, packDir, { recursive: true })
+    const cssPath = join(packDir, 'mobile.css')
+    assert.ok(readFileSync(cssPath, 'utf8').includes(':not([data-dsh-panel])'), 'the source pack must use the host gate')
+    writeFileSync(cssPath, `${readFileSync(cssPath, 'utf8')}\n${cssAppend}`)
+    return fn(packDir)
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+}
+
+// Reviewer B1: a `<44px` retreat check would pass an ungated 40px floor that shrinks
+// the host's own 44px floor on dsh-mobile >=0.8.1. The probe must read the computed
+// min-height (back to the no-pack value), so this deliberately broken pack has to
+// turn red — no device needed, but the browser job runs it with
+// CHECKPACK_REGRESSION_REQUIRE_BROWSER=1.
+test('host gate: an ungated 40px floor fails runtime.hostGate.floor-retreated', { skip, timeout: RUN_TIMEOUT_MS }, () => {
+  withMutatedPack(CONTEXT_PACK, `
+@media (pointer: coarse) {
+  :root:not([data-dsh-adapt="off"]) [data-slot="main"] [data-dshm-context-panel="1"]
+    :where(button, [role="button"]) { min-height: 40px !important; }
+}
+`, packDir => {
+    const result = runChecker(packDir)
+    assert.equal(result.status, 1, `check-pack should exit 1 for a residual 40px floor\nstdout: ${result.stdout?.slice(0, 2000)}\nstderr: ${result.stderr?.slice(0, 2000)}`)
+    assert.notEqual(result.payload, null, 'check-pack --json output was not JSON (is Playwright/Chromium available?)')
+    assert.equal(result.payload.ok, false, 'check-pack --json should report ok=false')
+    const pack = result.payload.packs.find(item => item.id === 'dsh-context-mobile')
+    assert.ok(pack, 'dsh-context-mobile missing from the --json report')
+    const assertion = pack.assertions.find(item => item.id === 'runtime.hostGate.floor-retreated')
+    assert.ok(assertion, 'runtime.hostGate.floor-retreated missing from the report')
+    assert.equal(assertion.status, 'failed', `expected the residual 40px floor to fail the gate check, got ${assertion.status}: ${assertion.message}`)
+    assert.match(assertion.message, /40px/, `the failure should name the residual min-height: ${assertion.message}`)
+  })
+})
+
+// Reviewer F1 (t9): the host-probe used to sample only the first button/input, so a
+// pack could crush a non-sampled control (here: every `[role="group"] button`) while
+// the sampled settings button still measured 44px. The probe now walks every control,
+// so this deliberately narrowed floor has to turn red.
+test('host gate: crushing only [role=group] buttons still fails host-floor-kept', { skip, timeout: RUN_TIMEOUT_MS }, () => {
+  withMutatedPack(CONTEXT_PACK, `
+@media (pointer: coarse) {
+  :root:not([data-dsh-adapt="off"]):not(.dshm-bp1):not(.dshm-bp2):not(.dshm-bp3):not(.dshm-bp4):not(.dshm-bp5):not(.dshm-bp6)
+    .dshm-main[data-dsh-panel="1"] [data-slot="main"] [data-dshm-context-panel="1"] [role="group"] button {
+    min-height: 20px !important;
+  }
+}
+`, packDir => {
+    const result = runChecker(packDir)
+    assert.equal(result.status, 1, `check-pack should exit 1 when a non-sampled control is crushed\nstdout: ${result.stdout?.slice(0, 2000)}\nstderr: ${result.stderr?.slice(0, 2000)}`)
+    assert.notEqual(result.payload, null, 'check-pack --json output was not JSON (is Playwright/Chromium available?)')
+    assert.equal(result.payload.ok, false, 'check-pack --json should report ok=false')
+    const pack = result.payload.packs.find(item => item.id === 'dsh-context-mobile')
+    assert.ok(pack, 'dsh-context-mobile missing from the --json report')
+    const assertion = pack.assertions.find(item => item.id === 'runtime.hostGate.host-floor-kept')
+    assert.ok(assertion, 'runtime.hostGate.host-floor-kept missing from the report')
+    assert.equal(assertion.status, 'failed', `expected the crushed group buttons to fail host-floor-kept, got ${assertion.status}: ${assertion.message}`)
+    assert.match(assertion.message, /20px/, `the failure should name the crushed height: ${assertion.message}`)
+    assert.match(assertion.message, /4 个不达标/, `the failure should count every crushed control: ${assertion.message}`)
   })
 })

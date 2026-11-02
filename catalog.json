@@ -34,14 +34,14 @@
       "evidence": {
         "level": "runtime-0.8.0",
         "have": [
-          "check-pack 37/0/0（390×844 粗指针、1280×800 精指针严格零回归、opt-out、宿主自管面板状态时的门阀）：按钮 28→44、图标按钮 28×28→44×44、输入/下拉 32→44；桌面逐项等于基线。",
+          "check-pack 38/0/0（390×844 粗指针、1280×800 精指针严格零回归、opt-out、宿主自管面板状态时的门阀）：按钮 28→44、图标按钮 28×28→44×44、输入/下拉 32→44；桌面逐项等于基线。",
           "0.8.0 真实运行时（真实网关 192.168.1.11:3443，390×844 粗指针，Plugins 面板）：纯宿主 94/94 个主槽控件 <44px（最小 20px：About plugins 20×20、Refresh 28×28、tab 34px、switch 36×20）；只开本包后 94→41 未达标（抬起 53 个；最小命中仍是 20px，未达标控件类型 t1 未定性）。【事实】实测-0.8.0-20261031.md §4.1",
           "面板态横向溢出：390 上 390/390、768 上 768/768，本包不改变面板左右缘（宽度回收在 0.8.0 无触发场景，只作 100vw/固定像素根的兜底）。【事实】同上 §4.1 / §4.2",
-          "release/main 分线（本包唯一的版本判断，纯 CSS）：0.8.0 安装包里 data-dsh-panel 与 text-size-adjust 均 0 命中、docs/MOBILE_PLUGIN_BASELINE.md 不存在（v0.8.0 发布 10-30T03:14Z）；#319 合入 main（6c50b13，10-31T08:46Z）后宿主自己写 data-dsh-panel，并给面板内 button/[role=button]/select/input/textarea 44px 高度地板、给面板根 max-width:100%。本包用 .dshm-main:not([data-dsh-panel]) 作门阀：0.8.0 上给高度地板，宿主接管后高度地板与宽度收口退让，只保留宿主不提供的 min-width:44（svg-only 图标按钮）。shim 不写宿主的 data-dsh-panel，改用自有 data-dshm-adapt-panel；check-pack 以 host-probe 模拟宿主自管状态，断言门阀退让、宿主属性未被改写。【事实】grep + #319 merge diff；宿主版运行时未实测【推断】",
+          "release/main 分线（本包唯一的版本判断，纯 CSS）：0.8.0 安装包里 data-dsh-panel 与 text-size-adjust 均 0 命中、docs/MOBILE_PLUGIN_BASELINE.md 不存在（v0.8.0 发布 10-30T03:14Z）；#319 合入 main（6c50b13，10-31T08:46Z）后宿主自己写 data-dsh-panel，并给面板内 button/[role=button]/select/input/textarea 44px 高度地板、给面板根 max-width:100%。本包用 .dshm-main:not([data-dsh-panel]) 作门阀：0.8.0 上给高度地板与宽度下限，宿主接管后高度地板与面板根宽度收口退让；min-width:44 保留为 0.8.0 的兜底（0.8.1 起宿主也提供同值，`lib:507`，不再声称是宿主没有的东西）。shim 不写宿主的 data-dsh-panel，改用自有 data-dshm-adapt-panel；check-pack 以 host-probe 模拟宿主自管状态，断言门阀退让、宿主属性未被改写。【事实】grep + #319 merge diff；宿主版运行时未实测【推断】",
           "rail-clearance 已退役：390 面板态下抽屉是 `data-right-modal` → display:none（宽 0），768 上宿主已 margin-left:56px 让位、且本包媒体查询（max-width:720）不命中——两种尺寸都没有可测量的让位场景，规则已删除。【事实】实测-0.8.0-20261031.md §4.1/§4.2"
         ],
         "missing": [
-          "含 #319 的发布版（≥0.8.1，2026-11-01 已发布）上的真实运行时：门阀退让后的数值只在 check-pack 的 host-probe 合成状态下验证过；本机仍跑 0.8.0，尚未在真实 0.8.1 宿主上量。",
+          "含 #319 的发布版（0.8.1，2026-11-01 已发布）上的真实运行时：门阀退让后的数值只在 check-pack 的 host-probe 合成状态下验证过（注入的正是 0.8.1 `lib:504-513` 规则）；本机已升级 0.8.1，但尚未在真实 0.8.1 宿主上装包测量。",
           "真机验证（iOS / Android WebView，390×844 触摸）：拇指准确度、真实 env(safe-area-inset-bottom)（headless 里为 0）、软键盘弹出后的可视区。",
           "宽表/画布类 100vw 插件根的实际溢出压力，以及 720/721/899/900 中间宽度上的数值。"
         ],
@@ -242,30 +242,31 @@
       ],
       "usesHostMarkers": [
         ".dshm-main",
-        ".dshm-mainContent",
-        ".dshm-panelNav",
         "[data-slot=\"main\"]"
       ],
       "verifiedWith": {
-        "dshMobile": "0.8.1",
-        "dsh": "0.2.1"
+        "dshMobile": "0.8.0 (fixture-modelled)",
+        "dsh": "not executed"
       },
       "evidence": {
         "level": "directed-fixture",
         "have": [
-          "定向 fixture 通过（不是通用 fixture）：packs/dsh-context-mobile/fixture.html 按 dsh-context 0.79.0 源码（contextView.tsx / overviewPanel.tsx / statsContext.tsx / base.css / overview.css）手工还原主面板结构；check-pack 全轮次使用它。390×844 粗指针：粒度按钮 17→44、设置 24→44、纯图标按钮 22×22→44×44、搜索框 28→44 且字号 13→16、下拉 28→44、自定义 role=button 行 →44；opt-out 全部回落；1280×800 精指针 + --desktop 严格零回归。",
-          "源码证据（npm dsh-context@0.79.0 tarball，client.js 与安装副本 sha256 一致）：主面板经 conversation.view 注册（src/client/index.ts:64-65），根节点 .lc-root 无 data-dsh-* 标记；.lc-gran-btn font-size 11px/line-height 1/padding 3px 8px ≈17–22px 高（src/client/styles/base.css:42）；.lc-ov-settings 12px/18px + padding 3px 12px ≈24px（overview.css:8）；.lc-ov-balance 12px/18px + 2px 10px ≈22px（overview.css:11）；.lc-searchbox input 无 font-size（base.css:49-50）→ 继承 13px。",
-          "定位桥（包自有，非第三方类名）：mobile.js 只在主槽出现 dsh-context 自己的 data-lc-* 属性（trend/bars/tip/current/key/clearable）时，给面板根打 data-dshm-context-panel=\"1\"；CSS 全部收敛在该标记内，不点名 .lc-* 类名、不写宿主 data-dsh-panel。",
-          "release/main 两条线：0.8.x（宿主无 #319）上本包给完整高度地板；0.8.1+ 宿主已给按钮/输入 44px 高度地板，本包高度规则按 .dshm-main:not([data-dsh-panel]) 退让，只保留宿主没有的 min-width:44 与输入框 16px 字号；check-pack host-probe 在伪造宿主自管状态时验证了退让与不抢写。"
+          "定向 fixture 通过（2026-11-02 复核后重做）：packs/dsh-context-mobile/fixture.html 用真实 build 中存在的类名（lc-ov-page / lc-ov-pagehead / lc-ov-settings / lc-ov-balance / lc-stat* / lc-gran-btn / lc-searchbox / lc-clearable / lc-settings-select / lc-sl-row / lc-hovertip）还原主面板；check-pack 全轮次使用它。390×844 粗指针：8 个按钮 17/20/26→44（高与宽）、搜索框 32.4→44（字号保持 16px）、下拉 28→44、role=button 行 →44；opt-out 全部回落；1280×800 + --desktop 严格零回归。RESULT PASS（42 passed · 0 failed · 1 skipped）。",
+          "host-probe（2026-11-02 新判据）：先只写宿主的 data-dsh-panel（sentinel）→ 本包计算后的 min-height 回到基线（按钮/输入 auto）、按钮/输入不小于无包基线；再写 data-dsh-panel=\"1\" 并注入 0.8.1 宿主地板 → 按钮/输入仍 ≥44px、宿主属性未被 shim 改写。4 条断言：runtime.hostGate.untouched / floor-retreated / no-shrink / host-floor-kept。",
+          "源码证据（npm dsh-context@0.79.0 tarball，client.js sha256 与安装副本一致）：主面板经 conversation.view 注册（src/client/index.ts:64-65）；.lc-gran-btn 11px/1 + 3px 8px（base.css:42）；.lc-ov-settings 12px/18px + 3px 12px（overview.css:8）；.lc-ov-balance 12px/18px + 2px 10px（overview.css:11）；.lc-searchbox input 无自有字号（base.css:49-50）；hovertip 是 position:fixed、max-width:min(320px,50vw)（overview.css:18）。",
+          "真实页面结构核对（verifier t7，0.8.1 + dsh-context 0.79.0 只读 live DOM，2026-11-02）：面板根是 SECTION.lc-ov-page（[data-slot=\"main\"] 的直接子节点）；data-lc-tip 在面板子树内，mobile.js 的 signal.closest('[data-slot=\"main\"] > *') 能落到面板根；真实页另有 24px 的 <a href> 余额链接（本包不覆盖）。",
+          "release / main 两条线（2026-11-02 修正）：0.8.0 宿主没有插件面板地板，本包在 .dshm-main:not([data-dsh-panel]) 下给 44px 高度+宽度与 touch-action；0.8.1 起宿主自己给 min-width:44 + min-height:44（lib/mobile-layout.js:507）与 touch-action，本包全部退让。输入框 16px 字号在 0.8.0/0.8.1 都由宿主提供（lib:459），本包已删除重复的字号规则，避免压回 --dsh-content-font-size。"
         ],
         "missing": [
-          "未在真实 dsh-mobile 专用页/真机上跑过：所有数值来自 check-pack 的定向 fixture（合成 DOM，非真实页面捕获）；真实面板的控件数量、动态 tab、加载态未覆盖。",
-          "hover-only 提示（role=\"tooltip\" / data-lc-tip）在触屏不可达是交互缺口，本包只做显示收敛（不溢出），没有 tap 入口；需上游加点击/长按触发。",
-          "composer overlay（conversation.input.overlay 的 ContextModal）与右栏 tab 不在本包范围：两者不在 [data-slot=\"main\"]，check-pack 的 hit-target 断言也量不到。",
-          "0.79.0 之外的版本（0.78.x、未来小版本）未验证：data-lc-* 定位信号若被重命名，本包会静默失效（不报错），届时需要重新核对。",
+          "未在真实运行时验证（verifiedWith 记录的是 fixture 模拟的 0.8.0 发布线与 host-probe 注入的 0.8.1 规则，不是实测范围）：没有把包装进 dsh-mobile 0.8.0/0.8.1 跑过，真实专用页与真机都没有装包后的数字。",
+          "fixture 是源码手工还原 + live DOM 结构核对，不是像素捕获；真实页的数据、tab、加载态、控件数量会变（对照见 packs/dsh-context-mobile/README.md §3.3）。",
+          "真实页有 24px 的 <a href> 余额链接：宿主地板不覆盖 a、本包也不覆盖，fixture 因合约不能写 href 而无法验证这个缺口。",
+          "hover-only 提示（role=\"tooltip\" / data-lc-tip）在触屏不可达，本包不修（不碰其宽度/位置）；需要上游加 tap/长按入口。",
+          "composer overlay（conversation.input.overlay 的 ContextModal）与右栏 tab 不在 [data-slot=\"main\"]，hit-target 断言量不到。",
+          "data-lc-* 定位信号若被上游重命名，本包会静默失效；check-pack 用合成 fixture，测不到真实页面的信号缺失。",
           "iOS / WKWebView 未验证；Android 真机未验证。"
         ],
-        "promotion": "补齐真实专用页 + 真机（至少一台 Android）后才可升 candidate；定向 fixture 只能证明规则本身，不证明真实页面上的控件覆盖率。"
+        "promotion": "补齐真实专用页（0.8.0 与 0.8.1 各一次）与至少一台真机后才可升 candidate；定向 fixture + host-probe 只证明规则与门阀本身，不证明真实页面覆盖率。"
       },
       "since": "0.3.7"
     }

@@ -107,9 +107,32 @@ const DESKTOP_VIEWPORT = Object.freeze({ width: 1280, height: 800 })
 const HIT_TARGET = 44
 const INPUT_FONT_SIZE = 16
 const EPSILON = 0.5
+
+/**
+ * The host floor dsh-mobile >=0.8.1 applies to an open plugin panel, copied from
+ * the installed `lib/mobile-layout.js:504-513` (min-width + min-height for
+ * button/[role=button]/select/input, input font size, panel-root clamp, pane
+ * scrolling). The host-owned probe injects it so it can prove the pack does not
+ * *shrink* the floor the host provides — not merely that the pack's own selectors
+ * stopped matching. Kept in sync with the host by hand: it is a test fixture, not a
+ * claim that every host version looks like this.
+ */
+const HOST_FLOOR_CSS = [
+  '.dshm-main[data-dsh-panel="1"] .dshm-mainContent{overflow-y:auto;overscroll-behavior:contain}',
+  '.dshm-main[data-dsh-panel="1"] .dshm-mainContent>[data-slot="main"]>:not([data-dsh-adapt="off"]){max-width:100%;box-sizing:border-box}',
+  '@media (pointer: coarse){',
+  '.dshm-main[data-dsh-panel="1"] [data-slot="main"]>:not([data-dsh-adapt="off"]) :is(button,[role="button"],select,input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=hidden]):not([type=color]):not([type=file]):not([type=image])):not([role="switch"],[role="checkbox"],[role="radio"],[role="slider"],[data-dsh-adapt="off"],[data-dsh-adapt="off"] *){min-width:44px!important;min-height:44px!important}',
+  '.dshm-main[data-dsh-panel="1"] [data-slot="main"]>:not([data-dsh-adapt="off"]) :is(button,[role="button"],a):not([data-dsh-adapt="off"],[data-dsh-adapt="off"] *){touch-action:manipulation}',
+  'body:has(.dshm-shell) :is(input,textarea){font-size:max(16px,1em,var(--dsh-content-font-size,1em))!important}',
+  '}',
+].join('\n')
 // Input types that do not accept text; their font-size has nothing to do with the
 // iOS focus-zoom behaviour the inputFontSize assertion protects.
 const NON_TEXT_INPUT_TYPES = new Set(['button', 'checkbox', 'color', 'file', 'hidden', 'image', 'radio', 'range', 'reset', 'submit'])
+// Inputs the dsh-mobile 0.8.1 host floor excludes (lib/mobile-layout.js:507) plus the
+// roles it excludes; a host-probe must not demand 44px from those.
+const NON_FLOOR_INPUT_TYPES = new Set(['checkbox', 'radio', 'range', 'hidden', 'color', 'file', 'image'])
+const NON_FLOOR_ROLES = new Set(['switch', 'checkbox', 'radio', 'slider'])
 
 const PACK_ID_RE = /^[a-z][a-z0-9-]{0,63}$/
 const MANIFEST_FIELDS = Object.freeze(['description', 'id', 'name', 'schemaVersion', 'version'])
@@ -909,6 +932,7 @@ function measurePage() {
     ariaLabel: element.getAttribute('aria-label'),
     type: (element.getAttribute('type') ?? 'text').toLowerCase(),
     fontSize: Number.parseFloat(getComputedStyle(element).fontSize),
+    minHeight: getComputedStyle(element).minHeight,
     ...rect(element),
   }))
   // The built-in fixture uses desktop-first classes; a per-pack fixture only has
@@ -930,14 +954,18 @@ function measurePage() {
       text: (element.textContent ?? '').trim().slice(0, 12),
       ...rect(element),
     }))
+  const buttonNode = document.querySelector('.plugin-btn') ?? fallbackButton
+  const iconButtonNode = document.querySelector('.plugin-iconbtn') ?? fallbackIconButton
+  const inputNode = document.querySelector('.plugin-input') ?? fallbackInput
+  const selectNode = document.querySelector('.plugin-select') ?? fallbackSelect
   return {
     viewport: { width: window.innerWidth, height: window.innerHeight },
     coarse: window.matchMedia('(pointer: coarse)').matches,
     panel: rect(panel),
-    button: rect(document.querySelector('.plugin-btn') ?? fallbackButton),
-    iconButton: rect(document.querySelector('.plugin-iconbtn') ?? fallbackIconButton),
-    input: rect(document.querySelector('.plugin-input') ?? fallbackInput),
-    select: rect(document.querySelector('.plugin-select') ?? fallbackSelect),
+    button: rect(buttonNode),
+    iconButton: rect(iconButtonNode),
+    input: rect(inputNode),
+    select: rect(selectNode),
     panelNavButton: rect(document.querySelector('.dshm-panelNav button')),
     sidebarButtons,
     drawer: rect(document.querySelector('.dshm-drawer')),
@@ -1018,7 +1046,8 @@ async function runFixture(browser, options) {
               if (document.documentElement.hasAttribute('data-dsh-floaters')) return true
               const slot = document.querySelector('[data-slot="main"]')
               if (slot === null) return false
-              for (const element of slot.querySelectorAll('*')) {
+              // The slot root itself may carry the pack's marker too.
+              for (const element of [slot, ...slot.querySelectorAll('*')]) {
                 for (const attribute of element.attributes) {
                   if (attribute.name.startsWith('data-dsh')) return true
                 }
@@ -1038,9 +1067,13 @@ async function runFixture(browser, options) {
 
     // A pack that gates rules on the host's own `data-dsh-panel` (dsh-mobile #319)
     // must back off once the host owns that attribute — and must never write it
-    // itself. Simulate that host: set a sentinel value, let two frames pass (the
-    // pack's own rAF shim would rewrite the attribute by now if it still did), then
-    // read every number again. The sentinel is restored before the later readings.
+    // itself. Two readings, both restored before the later measurements:
+    //   A. sentinel value, no host CSS: proves the shim leaves the host attribute
+    //      alone and the pack's own 44px floor is gone. "Gone" is read from the
+    //      computed min-height (back to the no-pack value), because a rendered
+    //      height below 44px could equally come from an unrelated 40px rule.
+    //   B. `data-dsh-panel="1"` plus the host's own 0.8.1 floor: proves the pack
+    //      does not shrink the floor the host provides (rendered height stays ≥44).
     let hostOwned = null
     if (options.probeHostGate === true && device === 'mobile') {
       const staged = await page.evaluate(async () => {
@@ -1051,8 +1084,24 @@ async function runFixture(browser, options) {
         return true
       })
       if (staged === true) {
-        hostOwned = await page.evaluate(measurePage)
-        await page.evaluate(() => document.querySelector('.dshm-main')?.removeAttribute('data-dsh-panel'))
+        const retreated = await page.evaluate(measurePage)
+        const stagedHost = await page.evaluate(async css => {
+          const main = document.querySelector('.dshm-main')
+          if (main === null) return false
+          main.setAttribute('data-dsh-panel', '1')
+          const style = document.createElement('style')
+          style.setAttribute('data-checkpack-host-floor', '1')
+          style.textContent = css
+          document.head.append(style)
+          await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+          return true
+        }, HOST_FLOOR_CSS)
+        const withHost = stagedHost === true ? await page.evaluate(measurePage) : null
+        await page.evaluate(() => {
+          document.querySelector('style[data-checkpack-host-floor]')?.remove()
+          document.querySelector('.dshm-main')?.removeAttribute('data-dsh-panel')
+        })
+        hostOwned = { retreated, withHost }
       }
     }
 
@@ -1101,6 +1150,21 @@ async function runFixture(browser, options) {
 
 const near = (left, right, epsilon = EPSILON) => Math.abs(left - right) <= epsilon
 const fmt = value => (value === null || value === undefined ? '—' : `${value}px`)
+
+/** Computed `min-height` as a number; `auto`/missing becomes null. */
+function minHeightPx(value) {
+  if (value === null || value === undefined) return null
+  const parsed = Number.parseFloat(String(value))
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+/** Whether the dsh-mobile >=0.8.1 host floor targets this control (lib:507). */
+function hostFloorCovers(control) {
+  if (NON_FLOOR_ROLES.has(control.role ?? '')) return false
+  if (control.tag === 'button' || control.tag === 'select' || control.role === 'button') return true
+  if (control.tag === 'input') return NON_FLOOR_INPUT_TYPES.has(control.type) === false
+  return false
+}
 
 function checkDefinition(report, layer, fixture, packId) {
   const { activation, errors } = fixture
@@ -1281,55 +1345,117 @@ function checkMobileAssertions(report, baseline, after, packId, hasScript, fixtu
  * rules on the host's attribute must:
  *   - leave that attribute alone (the host owns it; a pack that also writes it
  *     would fight the host on every sync),
- *   - stop applying the rules the host now provides (no duplicate floor),
- *   - keep whatever the host does not provide (core-panel's `min-width` for
- *     svg-only icon buttons).
- * `after.hostOwned` is the same page measured with a simulated host-owned
- * attribute; `baseline` is the no-pack reading at the same viewport.
+ *   - actually remove its own floor when the host takes over — read from **every**
+ *     control's computed `min-height`, back to the no-pack value. A rendered height
+ *     below 44px is not enough: an unrelated ungated 40px rule would satisfy that
+ *     while still shrinking the host's floor,
+ *   - never shrink any control below its no-pack baseline (a 16px input font may
+ *     grow the intrinsic height; ±2px is tolerated, shrinking is not),
+ *   - leave the host's own floor intact: with the 0.8.1 floor injected, every
+ *     control the floor covers must still render at ≥ HIT_TARGET - EPSILON and
+ *     above `baseline - 2`; controls the floor does not cover (textarea, switch…)
+ *     must at least not shrink.
+ * `after.hostOwned` carries both readings (`retreated`, `withHost`), each with the
+ * full `controls` list measured on the same DOM.
  */
 function checkHostGate(report, baseline, after) {
   const layer = 'runtime'
   const probe = after.hostOwned
-  if (probe === null || probe === undefined) {
+  if (probe === null || probe === undefined || probe.retreated === undefined || probe.withHost === null || probe.withHost === undefined) {
     report.fail(layer, 'runtime.hostGate.probe', '无法模拟宿主自管面板状态（页面里没有 .dshm-main）')
     return
   }
-  if (probe.panelState === 'host-probe') {
+  const retreated = probe.retreated
+  const withHost = probe.withHost
+
+  if (retreated.panelState === 'host-probe') {
     report.pass(layer, 'runtime.hostGate.untouched', '宿主自管的 data-dsh-panel 未被 shim 改写（两帧后仍是 host-probe）')
   } else {
-    report.fail(layer, 'runtime.hostGate.untouched', `shim 改写了宿主的 data-dsh-panel：期望 host-probe，实际 ${probe.panelState ?? 'null'}`)
+    report.fail(layer, 'runtime.hostGate.untouched', `shim 改写了宿主的 data-dsh-panel：期望 host-probe，实际 ${retreated.panelState ?? 'null'}`)
   }
-  if (probe.ownPanelState === '1') {
+
+  if (retreated.ownPanelState === '1') {
     report.pass(layer, 'runtime.hostGate.own-state', '本包自己的 data-dshm-adapt-panel 仍由 shim 维护（=1）')
-  } else if (probe.ownPanelState === null) {
+  } else if (retreated.ownPanelState === null) {
     // A pack may use its own marker name (e.g. data-dshm-context-panel on the panel
-    // root). The gate still has to be proven; only the conventional name is missing.
+    // root). The gate itself is still proven by the two floor assertions below.
     report.skip(layer, 'runtime.hostGate.own-state', '本包不使用 data-dshm-adapt-panel：跳过自有状态断言（门阀退让仍会验证）')
   } else {
-    report.fail(layer, 'runtime.hostGate.own-state', `本包自己的面板状态没有写对：data-dshm-adapt-panel=${probe.ownPanelState}`)
+    report.fail(layer, 'runtime.hostGate.own-state', `本包自己的面板状态没有写对：data-dshm-adapt-panel=${retreated.ownPanelState}`)
   }
 
-  // The gate has to remove the *44px floor*, not restore every pixel: a pack may
-  // keep other rules that change intrinsic height (e.g. a 16px input font).
-  const floorFailures = []
-  if (probe.button !== null && probe.button.height >= HIT_TARGET - EPSILON) {
-    floorFailures.push(`按钮仍 ≥ ${HIT_TARGET}px（${fmt(probe.button.height)}）`)
+  const baselineControls = Array.isArray(baseline.controls) ? baseline.controls : []
+  const retreatedControls = Array.isArray(retreated.controls) ? retreated.controls : []
+  const hostControls = Array.isArray(withHost.controls) ? withHost.controls : []
+  if (baselineControls.length === 0 || retreatedControls.length !== baselineControls.length || hostControls.length !== baselineControls.length) {
+    report.fail(layer, 'runtime.hostGate.probe', `控件集合不一致：基线 ${baselineControls.length} / sentinel ${retreatedControls.length} / 宿主地板 ${hostControls.length}（同一 fixture 应当同序同量）`)
+    return
   }
-  if (probe.input !== null && probe.input.height >= HIT_TARGET - EPSILON) {
-    floorFailures.push(`输入仍 ≥ ${HIT_TARGET}px（${fmt(probe.input.height)}）`)
+
+  const labelOf = (control, index) => `${control.tag}${control.role === null || control.role === undefined ? '' : `[role=${control.role}]`}${control.ariaLabel === null || control.ariaLabel === undefined ? '' : `[${control.ariaLabel}]`} #${index + 1}`
+  const smallest = values => (values.length === 0 ? null : Math.min(...values))
+  const firstFew = failures => failures.slice(0, 3).join('；')
+
+  // The direct evidence that the gated floor is gone: every control's computed
+  // min-height returns to the value the page had before the pack loaded. A residual
+  // ungated `min-height` (e.g. 40px on one group) fails here even when the rendered
+  // height is < 44px — and no control can hide by not being the "first" one.
+  const minHeightFailures = []
+  const probeMinHeights = []
+  for (let index = 0; index < baselineControls.length; index += 1) {
+    const base = baselineControls[index]
+    const now = retreatedControls[index]
+    const left = minHeightPx(now.minHeight)
+    const right = minHeightPx(base.minHeight)
+    if (left !== null) probeMinHeights.push(left)
+    const same = (left === null && right === null) || (left !== null && right !== null && Math.abs(left - right) <= EPSILON)
+    if (same === false) minHeightFailures.push(`${labelOf(now, index)} min-height ${now.minHeight ?? '—'} ≠ 基线 ${base.minHeight ?? '—'}`)
   }
-  if (floorFailures.length > 0) {
-    report.fail(layer, 'runtime.hostGate.backoff', `宿主已接管面板状态时高度地板没有退让：${floorFailures.join('；')}`)
+  if (minHeightFailures.length > 0) {
+    report.fail(layer, 'runtime.hostGate.floor-retreated', `宿主接管后 ${minHeightFailures.length}/${baselineControls.length} 个控件的 min-height 没有回到基线（最小 ${fmt(smallest(probeMinHeights))}）：${firstFew(minHeightFailures)}`)
   } else {
-    report.pass(layer, 'runtime.hostGate.backoff', `宿主已接管面板状态时高度地板退让（按钮 ${fmt(probe.button?.height)} / 输入 ${fmt(probe.input?.height)} 均 < ${HIT_TARGET}px；基线 ${fmt(baseline.button?.height)} / ${fmt(baseline.input?.height)}）`)
+    report.pass(layer, 'runtime.hostGate.floor-retreated', `宿主接管后全部 ${baselineControls.length} 个控件的 min-height 回到基线（最小 ${fmt(smallest(probeMinHeights))}，容差 ${EPSILON}px）`)
   }
 
-  if (probe.iconButton !== null) {
-    if (probe.iconButton.width < HIT_TARGET - EPSILON) {
-      report.fail(layer, 'runtime.hostGate.width-kept', `图标按钮宽 ${fmt(probe.iconButton.width)}：宿主不提供 min-width，这条不该退让`)
-    } else {
-      report.pass(layer, 'runtime.hostGate.width-kept', `与宿主不重复的 min-width 仍生效（图标按钮宽 ${fmt(probe.iconButton.width)}）`)
+  // A gated-off pack must not make any control smaller than the page without it.
+  const shrinkFailures = []
+  const probeHeights = []
+  for (let index = 0; index < baselineControls.length; index += 1) {
+    const base = baselineControls[index]
+    const now = retreatedControls[index]
+    probeHeights.push(now.height)
+    if (now.height < base.height - 2) shrinkFailures.push(`${labelOf(now, index)} ${fmt(now.height)} < 基线 ${fmt(base.height)} - 2`)
+  }
+  if (shrinkFailures.length > 0) {
+    report.fail(layer, 'runtime.hostGate.no-shrink', `宿主接管后 ${shrinkFailures.length}/${baselineControls.length} 个控件被压得比无包基线更小：${firstFew(shrinkFailures)}`)
+  } else {
+    report.pass(layer, 'runtime.hostGate.no-shrink', `宿主接管后全部 ${baselineControls.length} 个控件不小于无包基线（最小高度 ${fmt(smallest(probeHeights))}，允许 ±2px 字号固有高度差）`)
+  }
+
+  // With the host's own floor on the page, the pack must still leave it at ≥44px for
+  // every control the floor covers; anything else must at least not shrink.
+  const keptFailures = []
+  const keptHeights = []
+  let coveredCount = 0
+  for (let index = 0; index < baselineControls.length; index += 1) {
+    const base = baselineControls[index]
+    const now = hostControls[index]
+    if (hostFloorCovers(now)) {
+      coveredCount += 1
+      keptHeights.push(now.height)
+      if (now.height < HIT_TARGET - EPSILON) {
+        keptFailures.push(`${labelOf(now, index)} ${fmt(now.height)} < ${HIT_TARGET}px`)
+      } else if (now.height < base.height - 2) {
+        keptFailures.push(`${labelOf(now, index)} ${fmt(now.height)} < 基线 ${fmt(base.height)} - 2`)
+      }
+    } else if (now.height < base.height - 2) {
+      keptFailures.push(`${labelOf(now, index)} ${fmt(now.height)} < 基线 ${fmt(base.height)} - 2（宿主地板不覆盖此控件，也不得压小）`)
     }
+  }
+  if (keptFailures.length > 0) {
+    report.fail(layer, 'runtime.hostGate.host-floor-kept', `本包把宿主的地板压小了：${keptFailures.length} 个不达标（覆盖 ${coveredCount}/${baselineControls.length} 个控件，最小高度 ${fmt(smallest(keptHeights))}）：${firstFew(keptFailures)}`)
+  } else {
+    report.pass(layer, 'runtime.hostGate.host-floor-kept', `注入 0.8.1 宿主地板后 ${coveredCount} 个受覆盖控件仍 ≥ ${HIT_TARGET}px（最小高度 ${fmt(smallest(keptHeights))}），其余控件未压小`)
   }
 }
 

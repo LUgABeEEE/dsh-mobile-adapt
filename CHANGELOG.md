@@ -5,6 +5,20 @@
 
 ## [Unreleased]
 
+### Changed（2026-11-02，t10 加固）
+
+- `check-pack` 的 host-probe 改为**全量控件**断言（reviewer F1）：sentinel 阶段逐个比较 `controls` 的 computed `min-height` 与无包基线、逐个断言不小于基线；注入 0.8.1 宿主地板后逐个断言受覆盖控件 ≥44px（未覆盖控件只要求不压小）。报告给出不达标数量与最小 min-height/高度。新增红色回归「只压 `[role=group] button` 必须 FAIL」。
+- `tools/bundle.mjs` 重新纳入 `dsh-context-mobile`；`package.json` 升到 **0.3.7**（只升版本号，未发布）。
+- 修正 core-panel / catalog / compat / 根 README 里「宿主不提供 min-width」的旧说法（0.8.1 起宿主同时给 `min-width:44`，`lib/mobile-layout.js:507`），并把「本机仍跑 0.8.0」更正为「本机已 0.8.1，但未在真实 0.8.1 上装包复测」。
+- `dsh-context-mobile` 的 fixture 文档补 Chromium 版本（156.0.8078.4）与 reviewer 段的真实页控件计数（6 个可测控件 + 1 个 24px 链接）。
+
+### Fixed（2026-11-02，`dsh-context-mobile` 复核修复）
+
+- `check-pack` 的 host-probe 判据回退问题：`<44px` 的判定可被「无门阀 40px 残留地板」利用（复核 B1）。现在两段测量——sentinel 阶段看**计算后的 `min-height`** 是否回到无包基线（直接证据），注入 0.8.1 宿主地板后看控件是否仍 ≥44px，并恢复「不得比无包基线更小（±2px 字号差）」；`test/checkpack-regression.test.mjs` 增加「无门阀 40px 必须 FAIL」的红色回归。
+- `dsh-context-mobile` 删除与宿主重复的 `min-width:44` 与 16px 字号规则（复核 B2：0.8.1 已给 `min-width`，0.8.0/0.8.1 都已给输入 16px）；README / extension 描述 / catalog evidence 同步删除「宿主只给高度 / 16px 是宿主没有的」表述。
+- `dsh-context-mobile` 的 fixture 按真实结构重做（真实根 `SECTION.lc-ov-page`、真实类名、fixed `role=tooltip`、`data-lc-tip` 信号桥），补 §8.1 的捕获口径/控件计数/差异表/独立复核段与 `shots/` 前后截图（复核 B3）。
+- `catalog.json`：`dsh-context-mobile.verifiedWith` 改为 fixture 支撑的口径，并在 `evidence.missing` 明写未在真实运行时装包验证；`usesHostMarkers` 只保留包实际使用的 `.dshm-main` 与 `[data-slot="main"]`（复核 B4/B8）。
+
 ## [0.3.6] - 2026-11-01
 
 ### Added
