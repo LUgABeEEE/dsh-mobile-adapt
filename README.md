@@ -16,6 +16,26 @@ $DSH_HOME/mobile-access/extensions/<id>/
 
 Copy it in and the host picks it up within two seconds; move it out and it is gone. No restart, no configuration file, no second auth model.
 
+## One plugin, many packs
+
+`dsh-mobile` never receives an adaptation pack of its own: the complete deployment is
+**dsh-mobile + this package**. The host contributes exactly its public `extensions/` directory and
+the runtime that injects `mobile.css` / `mobile.js`; everything that decides *what* a phone adapts
+lives here — packs, `catalog.json`, the [compatibility list](compat.json), the settings panel that
+offers one-click installs, and the CLI.
+
+For a full set the host only needs to see one extension:
+
+```bash
+npm run bundle                                        # build/dsh-ui-optimizer/
+node tools/install.mjs plugin build/dsh-ui-optimizer --yes
+```
+
+`tools/bundle.mjs` rewrites each pack's `define()` into a collector and registers a single id, so
+the packs stay the unit of development and verification while the bundle is the unit of
+installation. Packs can still be installed one at a time (`node tools/install.mjs pack <id>`), and
+`build/` is generated, not source.
+
 ## The packs
 
 | pack | scope | what it does |
