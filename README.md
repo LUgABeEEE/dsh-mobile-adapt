@@ -36,6 +36,14 @@ the packs stay the unit of development and verification while the bundle is the 
 installation. Packs can still be installed one at a time (`node tools/install.mjs pack <id>`), and
 `build/` is generated, not source.
 
+## Where things live
+
+Two repositories make the deployment: `saya-ch/dsh-mobile` is the host and contributes only its
+`mobile-access/extensions/` runtime and the capabilities a pack cannot supply; this repository owns
+every pack, the catalog, the compatibility list, the panel and the tooling. The boundary and the
+change policy are written down in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — the short version
+is "adaptation content stays here, the host gets interfaces only".
+
 ## The packs
 
 | pack | scope | what it does |
@@ -101,6 +109,10 @@ node tools/check-pack.mjs                     # validate every pack first
 node tools/install.mjs pack core-panel --dry-run
 node tools/install.mjs pack core-panel --yes
 node tools/install.mjs --uninstall core-panel --yes
+
+# or install the whole set as one extension
+node tools/bundle.mjs
+node tools/install.mjs plugin build/dsh-ui-optimizer --yes
 ```
 
 `install.mjs` defaults to a dry run, resolves `$DSH_HOME` (or `~/.dsh`), refuses to overwrite an existing pack, and moves an uninstalled pack to `mobile-access-adapt-disabled/` so it can be restored.
