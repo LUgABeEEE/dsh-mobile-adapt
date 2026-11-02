@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "id": "host-service-panel-mobile",
+  "name": "host-service-panel Mobile Floor",
+  "version": "0.1.0",
+  "description": "主机观测（host-service-panel）面板在窄屏上的排版与触控下限：概览格重排、标题不叠字、按钮抬到 44px。"
+}

@@ -179,6 +179,49 @@
         "promotion": "真机已覆盖 Android 单机（K90 Max / Android 17 / App 0.7.1）；升 candidate 前仍需补 iOS 与 edge-to-edge 场景，或由宿主明确声明专用页的 safe-area 契约。"
       },
       "since": "0.2.0"
+    },
+    {
+      "id": "host-service-panel-mobile",
+      "status": "experimental",
+      "risk": "safe",
+      "default": "off",
+      "target": {
+        "package": "dsh-host-service-panel",
+        "version": "0.7.4",
+        "range": ">=0.7.4 <0.8.0"
+      },
+      "scope": "panel",
+      "capabilities": [
+        "hit-target",
+        "density"
+      ],
+      "surfaces": [
+        "mobile-dedicated"
+      ],
+      "usesHostMarkers": [
+        ".dshm-shell",
+        ".dshm-main",
+        ".dshm-mainContent",
+        "[data-slot=\"main\"]",
+        "[data-dsh-hsp-root]",
+        "[data-dsh-hsp-overview]"
+      ],
+      "verifiedWith": {
+        "dshMobile": "0.8.0",
+        "dsh": "0.2.1"
+      },
+      "evidence": {
+        "level": "directed-fixture + stock-web-lab",
+        "have": [
+          "定向 fixture（packs/host-service-panel-mobile/fixture.html）走 check-pack 全轮次",
+          "stock web 390x844 / 360x800：概览 6→3 列、页头换行有行距、按钮高 26/30→44、长 URL 折行",
+          "desktop 1280x800 精指针：逐项零改动（规则全在 pointer: coarse 内）"
+        ],
+        "missing": [
+          "真机验证（iPhone Safari / Android Chrome）",
+          "dsh-mobile 专用移动页（mobile 面）未验"
+        ]
+      }
     }
   ]
 }

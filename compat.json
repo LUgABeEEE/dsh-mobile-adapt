@@ -4,6 +4,21 @@
   "note": "第三方 DSH 插件在手机上的适配结论。verdict: native=原生可用无需干预；pack=本仓库有对应适配包；upstream=建议插件作者自己改；blocked=当前架构下做不了（自绘/原生/无面板 DOM）。证据等级写在 evidence 里，没有实测的一律标未验证。",
   "entries": [
     {
+      "plugin": "dsh-host-service-panel",
+      "name": "主机观测（主机服务）",
+      "version": "0.7.5",
+      "range": ">=0.7.5 <0.8.0",
+      "verdict": "pack",
+      "pack": "host-service-panel-mobile",
+      "category": "observability",
+      "summary": "0.7.5 起面板根与各区块暴露 data-dsh-hsp-* 稳定标记，可被适配包点名（A 档）。",
+      "mobile": "390×844 实测：概览 6 格落成 2 列占三行；页头换行后采样串压住概览格；按钮高 26/30px、搜索框 26px、字号 12px。适配包改为 3 列×2 行、给页头行距、控件抬到 44px / 16px。",
+      "evidence": "directed-fixture + stock-web-lab（check-pack RUNTIME 全 PASS）；真机未验。",
+      "links": {
+        "npm": "dsh-host-service-panel"
+      }
+    },
+    {
       "plugin": "dshmarket",
       "name": "插件市场",
       "version": "1.73.3",

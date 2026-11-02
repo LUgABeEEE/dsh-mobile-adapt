@@ -1,0 +1,98 @@
+/* host-service-panel-mobile · 主机观测面板的窄屏排版与触控下限
+ *
+ * 目标插件：dsh-host-service-panel（侧栏/面板入口「主机服务」，面板根 [data-dsh-hsp-root]）
+ * 实测基线：0.7.4，stock DSH web · 360×800 / 390×844 / 768×1024 隔离实例
+ *
+ * 只做三件事，都不改插件的桌面表现：
+ *   1. 概览格重排：插件用 6 列网格，窄屏落到 2 列会占三行，把「整体有没有事」
+ *      的第一屏挤掉；这里在窄屏给 3 列 × 2 行，数值降一档。
+ *   2. 页头不叠：`[data-dsh-hsp-head]` 是 flex-wrap + 右侧 `margin-left:auto` 的采样串，
+ *      窄屏换行后采样行会压在概览格上（真机 390 实测）。这里给行距、把采样串
+ *      与「刷新」并到同一行右端，串本身可截断。
+ *   3. 触控下限：粗指针下面板内可点控件补到 44×44 **命中区**，用伪元素外扩，
+ *      **不改视觉尺寸**——直接把 min-width 加在胶囊上会把按钮撑成圆球（实测）。
+ *
+ * 作用域：全部规则收敛在 `[data-slot="main"] [data-dsh-hsp-root]` 内，不点名 hsp-* 私有类；
+ *         `<html data-dsh-adapt="off">` 时全部失效。
+ */
+
+@media (pointer: coarse) {
+  :root:not([data-dsh-adapt="off"]) [data-slot="main"] [data-dsh-hsp-root] {
+    padding: 12px;
+    gap: 10px;
+  }
+
+  /* ── 页头：换行有行距；采样串与刷新共用第二行 ─────────────────────── */
+  :root:not([data-dsh-adapt="off"]) [data-slot="main"] [data-dsh-hsp-root] [data-dsh-hsp-head] {
+    row-gap: 8px;
+    min-height: 0;
+    height: auto;
+    align-items: center;
+  }
+
+  :root:not([data-dsh-adapt="off"]) [data-slot="main"] [data-dsh-hsp-root] [data-dsh-hsp-head] [data-dsh-hsp-beat] {
+    flex: 0 1 auto;
+    margin-left: auto;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  /* ── 概览：窄屏 3 列 × 2 行，数值降一档，副标题让位 ────────────────── */
+  :root:not([data-dsh-adapt="off"]) [data-slot="main"] [data-dsh-hsp-root] [data-dsh-hsp-overview] {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  :root:not([data-dsh-adapt="off"]) [data-slot="main"] [data-dsh-hsp-root] [data-dsh-hsp-ov] {
+    padding: 6px 8px 7px;
+  }
+
+  :root:not([data-dsh-adapt="off"]) [data-slot="main"] [data-dsh-hsp-root] [data-dsh-hsp-ov-value] {
+    font-size: 16px;
+  }
+
+  :root:not([data-dsh-adapt="off"]) [data-slot="main"] [data-dsh-hsp-root] [data-dsh-hsp-ov-sub] {
+    display: none;
+  }
+
+  /* ── 卡片与读数：收内边距；长值（URL）必须能折 ─────────────────────── */
+  :root:not([data-dsh-adapt="off"]) [data-slot="main"] [data-dsh-hsp-root] [data-dsh-hsp-card] {
+    padding: 10px 12px;
+  }
+
+  :root:not([data-dsh-adapt="off"]) [data-slot="main"] [data-dsh-hsp-root] [data-dsh-hsp-signal] {
+    min-height: 26px;
+  }
+
+  :root:not([data-dsh-adapt="off"]) [data-slot="main"] [data-dsh-hsp-root] [data-dsh-hsp-signal-text] {
+    font-size: 12px;
+  }
+
+  :root:not([data-dsh-adapt="off"]) [data-slot="main"] [data-dsh-hsp-root] [data-dsh-hsp-kv] {
+    flex-wrap: wrap;
+    row-gap: 2px;
+  }
+
+  :root:not([data-dsh-adapt="off"]) [data-slot="main"] [data-dsh-hsp-root] [data-dsh-hsp-kv] > [data-dsh-hsp-kv-value] {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  /* ── 触控下限 ────────────────────────────────────────────────────────
+     只抬 `min-height`，**不给文字按钮加 min-width**：`.hsp-btn` / `.hsp-air-tab`
+     都是 `border-radius: 999px` 的胶囊，44×44 会让「刷新」渲染成一个圆球（实测过）。
+     本面板没有图标按钮，所以不设 min-width。 */
+  :root:not([data-dsh-adapt="off"]) [data-slot="main"] [data-dsh-hsp-root]
+    :where(button, [role="button"], a[href], select) {
+    min-height: 44px;
+  }
+
+  /* 表单控件没法用伪元素，只能真的抬高度；16px 顺带解决 iOS 聚焦缩放。 */
+  :root:not([data-dsh-adapt="off"]) [data-slot="main"] [data-dsh-hsp-root]
+    :where(input, textarea) {
+    min-height: 44px;
+    font-size: 16px;
+  }
+}

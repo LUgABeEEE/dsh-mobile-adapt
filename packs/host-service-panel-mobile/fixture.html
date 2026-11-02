@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>host-service-panel-mobile · targeted fixture</title>
+<!--
+  Directed fixture for packs/host-service-panel-mobile.
+
+  Hand-written on purpose: the panel's DOM is small and stable (it ships its own
+  public markers `[data-dsh-hsp-root]` / `[data-dsh-hsp-view]`), so a captured subtree
+  would add 100 KB of live data for no extra signal. Every element below exists
+  in the real render — the class names mirror src/client/index.js.
+
+  When the panel's structure changes, this file must change with it; the pack is
+  checked against THIS DOM, and a stale fixture would quietly stop testing.
+-->
+<style>
+  .dshm-shell, .dshm-main, .dshm-mainContent { display: block; min-height: 100%; }
+  /* The plugin's own desktop CSS, reduced to what the pack overrides. Values are
+     copied from src/client/index.js so the "before" measurements are real. */
+  .hsp { display: flex; flex-direction: column; gap: 12px; padding: 16px; font: 12px system-ui, sans-serif; }
+  .hsp-head { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; min-height: 44px; }
+  .hsp-head-text { display: flex; flex-direction: column; gap: 1px; }
+  .hsp-title { font-size: 14px; font-weight: 600; }
+  .hsp-sub { font-size: 11px; color: #888; }
+  .hsp-tabs { display: inline-flex; gap: 2px; }
+  .hsp-tab { font: inherit; font-size: 13px; padding: 6px 14px; min-height: 30px; border: 0; background: transparent; color: #aaa; }
+  .hsp-beat { display: flex; align-items: center; gap: 6px; margin-left: auto; font-size: 11px; color: #888; }
+  .hsp-btn { font: inherit; font-size: 12px; padding: 4px 12px; min-height: 26px; border-radius: 999px; border: 1px solid #333; background: transparent; color: #eee; }
+  .hsp-overview { display: grid; gap: 8px; grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .hsp-ov { display: flex; flex-direction: column; gap: 1px; padding: 7px 10px 8px; border: 1px solid #2a2a2a; border-left-width: 3px; border-radius: 6px; text-align: left; font: inherit; color: inherit; }
+  .hsp-ov-k { font-size: 10.5px; color: #888; }
+  .hsp-ov-v { font-family: monospace; font-size: 20px; font-weight: 600; }
+  .hsp-ov-sub { font-size: 10.5px; color: #888; }
+  .hsp-signal { display: flex; align-items: center; gap: 8px; min-height: 30px; padding-left: 10px; border-left: 3px solid #888; }
+  .hsp-signal-text { font-size: 13px; }
+  .hsp-air-tabs { display: inline-flex; gap: 4px; }
+  .hsp-air-tab { font: inherit; font-size: 11px; padding: 3px 10px; min-height: 22px; border: 1px solid #333; border-radius: 999px; background: transparent; color: #aaa; }
+  .hsp-card { border: 1px solid #2a2a2a; border-radius: 6px; padding: 12px 14px; }
+  .hsp-kv { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 5px 0; border-bottom: 1px solid #222; }
+  .hsp-kv-key { font-size: 11px; color: #888; }
+  .hsp-kv-val { font-family: monospace; font-size: 12px; }
+  .hsp-search { font: inherit; font-size: 12px; padding: 4px 8px; min-height: 26px; border-radius: 999px; border: 1px solid #333; background: transparent; color: #eee; }
+</style>
+</head>
+<body>
+<div class="dshm-shell">
+<div class="dshm-main">
+<div class="dshm-mainContent">
+<div data-slot="main">
+  <div class="hsp" data-dsh-hsp-root data-dsh-hsp-view="airport">
+    <div class="hsp-head" data-dsh-hsp-head>
+      <div class="hsp-head-text">
+        <span class="hsp-title">主机服务</span>
+        <span class="hsp-sub">只读 · 本机（dsh-web 所在的主机）</span>
+      </div>
+      <div class="hsp-tabs" role="tablist">
+        <button type="button" class="hsp-tab" role="tab" aria-selected="true">机场</button>
+        <button type="button" class="hsp-tab" role="tab" aria-selected="false">主机</button>
+        <button type="button" class="hsp-tab" role="tab" aria-selected="false">任务</button>
+      </div>
+      <span class="hsp-beat" data-dsh-hsp-beat>采样正常 · 数据 刚刚 · 每 5 秒</span>
+      <button type="button" class="hsp-btn">刷新</button>
+    </div>
+
+    <div class="hsp-overview" data-dsh-hsp-overview role="group">
+      <button type="button" class="hsp-ov" data-dsh-hsp-ov="ok"><span class="hsp-ov-k">机场</span><span class="hsp-ov-v" data-dsh-hsp-ov-value>34/42</span><span class="hsp-ov-sub" data-dsh-hsp-ov-sub>🇭🇰 香港 05</span></button>
+      <button type="button" class="hsp-ov" data-dsh-hsp-ov="ok"><span class="hsp-ov-k">CPU</span><span class="hsp-ov-v" data-dsh-hsp-ov-value>60%</span></button>
+      <button type="button" class="hsp-ov" data-dsh-hsp-ov="ok"><span class="hsp-ov-k">内存</span><span class="hsp-ov-v" data-dsh-hsp-ov-value>43%</span></button>
+      <button type="button" class="hsp-ov" data-dsh-hsp-ov="ok"><span class="hsp-ov-k">磁盘</span><span class="hsp-ov-v" data-dsh-hsp-ov-value>44%</span></button>
+      <button type="button" class="hsp-ov" data-dsh-hsp-ov="ok"><span class="hsp-ov-k">失败单元</span><span class="hsp-ov-v" data-dsh-hsp-ov-value>0</span><span class="hsp-ov-sub" data-dsh-hsp-ov-sub>0 个定时器</span></button>
+      <button type="button" class="hsp-ov" data-dsh-hsp-ov="ok"><span class="hsp-ov-k">额度</span><span class="hsp-ov-v" data-dsh-hsp-ov-value>1.9%</span></button>
+    </div>
+
+    <div class="hsp-signal" data-dsh-hsp-signal="warn"><span class="hsp-signal-text" data-dsh-hsp-signal-text>🇭🇰 香港 05 · 123 ms · 34/42 节点可用 · 额度 1.9%</span></div>
+
+    <div class="hsp-air-tabs" role="tablist">
+      <button type="button" class="hsp-air-tab" role="tab" aria-selected="true">概览</button>
+      <button type="button" class="hsp-air-tab" role="tab" aria-selected="false">节点</button>
+      <button type="button" class="hsp-air-tab" role="tab" aria-selected="false">订阅</button>
+    </div>
+
+    <input class="hsp-search" type="search" placeholder="搜索节点">
+
+    <div class="hsp-card" data-dsh-hsp-card="card">
+      <div class="hsp-kv" data-dsh-hsp-kv><span class="hsp-kv-key">控制端口</span><span class="hsp-kv-val" data-dsh-hsp-kv-value>127.0.0.1:9090</span></div>
+      <div class="hsp-kv" data-dsh-hsp-kv><span class="hsp-kv-key">provider</span><span class="hsp-kv-val" data-dsh-hsp-kv-value>—</span></div>
+      <div class="hsp-kv" data-dsh-hsp-kv><span class="hsp-kv-key">分组</span><span class="hsp-kv-val" data-dsh-hsp-kv-value>AUTO · 🇭🇰 香港 05 · DIRECT</span></div>
+    </div>
+  </div>
+</div>
+</div>
+</div>
+</div>
+</body>
+</html>
