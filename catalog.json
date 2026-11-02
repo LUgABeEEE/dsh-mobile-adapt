@@ -222,6 +222,52 @@
           "dsh-mobile 专用移动页（mobile 面）未验"
         ]
       }
+    },
+    {
+      "id": "dsh-context-mobile",
+      "status": "experimental",
+      "risk": "safe",
+      "default": "off",
+      "target": {
+        "package": "dsh-context",
+        "version": "0.79.0",
+        "range": ">=0.79.0 <0.80.0"
+      },
+      "scope": "panel",
+      "capabilities": [
+        "hit-target"
+      ],
+      "surfaces": [
+        "mobile-dedicated"
+      ],
+      "usesHostMarkers": [
+        ".dshm-main",
+        ".dshm-mainContent",
+        ".dshm-panelNav",
+        "[data-slot=\"main\"]"
+      ],
+      "verifiedWith": {
+        "dshMobile": "0.8.1",
+        "dsh": "0.2.1"
+      },
+      "evidence": {
+        "level": "directed-fixture",
+        "have": [
+          "定向 fixture 通过（不是通用 fixture）：packs/dsh-context-mobile/fixture.html 按 dsh-context 0.79.0 源码（contextView.tsx / overviewPanel.tsx / statsContext.tsx / base.css / overview.css）手工还原主面板结构；check-pack 全轮次使用它。390×844 粗指针：粒度按钮 17→44、设置 24→44、纯图标按钮 22×22→44×44、搜索框 28→44 且字号 13→16、下拉 28→44、自定义 role=button 行 →44；opt-out 全部回落；1280×800 精指针 + --desktop 严格零回归。",
+          "源码证据（npm dsh-context@0.79.0 tarball，client.js 与安装副本 sha256 一致）：主面板经 conversation.view 注册（src/client/index.ts:64-65），根节点 .lc-root 无 data-dsh-* 标记；.lc-gran-btn font-size 11px/line-height 1/padding 3px 8px ≈17–22px 高（src/client/styles/base.css:42）；.lc-ov-settings 12px/18px + padding 3px 12px ≈24px（overview.css:8）；.lc-ov-balance 12px/18px + 2px 10px ≈22px（overview.css:11）；.lc-searchbox input 无 font-size（base.css:49-50）→ 继承 13px。",
+          "定位桥（包自有，非第三方类名）：mobile.js 只在主槽出现 dsh-context 自己的 data-lc-* 属性（trend/bars/tip/current/key/clearable）时，给面板根打 data-dshm-context-panel=\"1\"；CSS 全部收敛在该标记内，不点名 .lc-* 类名、不写宿主 data-dsh-panel。",
+          "release/main 两条线：0.8.x（宿主无 #319）上本包给完整高度地板；0.8.1+ 宿主已给按钮/输入 44px 高度地板，本包高度规则按 .dshm-main:not([data-dsh-panel]) 退让，只保留宿主没有的 min-width:44 与输入框 16px 字号；check-pack host-probe 在伪造宿主自管状态时验证了退让与不抢写。"
+        ],
+        "missing": [
+          "未在真实 dsh-mobile 专用页/真机上跑过：所有数值来自 check-pack 的定向 fixture（合成 DOM，非真实页面捕获）；真实面板的控件数量、动态 tab、加载态未覆盖。",
+          "hover-only 提示（role=\"tooltip\" / data-lc-tip）在触屏不可达是交互缺口，本包只做显示收敛（不溢出），没有 tap 入口；需上游加点击/长按触发。",
+          "composer overlay（conversation.input.overlay 的 ContextModal）与右栏 tab 不在本包范围：两者不在 [data-slot=\"main\"]，check-pack 的 hit-target 断言也量不到。",
+          "0.79.0 之外的版本（0.78.x、未来小版本）未验证：data-lc-* 定位信号若被重命名，本包会静默失效（不报错），届时需要重新核对。",
+          "iOS / WKWebView 未验证；Android 真机未验证。"
+        ],
+        "promotion": "补齐真实专用页 + 真机（至少一台 Android）后才可升 candidate；定向 fixture 只能证明规则本身，不证明真实页面上的控件覆盖率。"
+      },
+      "since": "0.3.7"
     }
   ]
 }

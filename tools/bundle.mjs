@@ -28,6 +28,9 @@ const SOURCES = [
   { id: 'core-panel', note: '面板内的触控地板、宽度收口与滚动约束（宿主已接管时自动退让）' },
   { id: 'shell-chrome', note: '外壳自身的触控下限（返回栏只抬不压，抽屉行 44px）' },
   { id: 'floaters', note: '右下角浮动控件的让位（实测占用高度，写成 --dshm-floaters）' },
+  { id: 'dshmarket-mobile', note: '插件市场面板（dshmarket 1.73.x）的触控地板' },
+  { id: 'host-service-panel-mobile', note: 'host-service 面板的手机布局与触控地板' },
+  { id: 'dsh-context-mobile', note: '上下文/成本面板（dsh-context 0.79.x）的触控地板与输入字号' },
 ]
 
 function read(relative) {

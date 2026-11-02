@@ -52,6 +52,8 @@ is "adaptation content stays here, the host gets interfaces only".
 | [`shell-chrome`](packs/shell-chrome/) | the shell itself | the open drawer's sidebar rows (36 → 44px); the "back to conversation" bar becomes a rise-only floor that never shrinks the host's own 48px |
 | [`floaters`](packs/floaters/) | floating widgets | measures bottom-right fixed widgets, reserves their height, so the last rows stop hiding underneath |
 | [`dshmarket-mobile`](packs/dshmarket-mobile/) | the plugin market panel | a 44px touch floor for `dshmarket` 1.73.x: buttons, icon buttons and the search field, scoped to `[data-dsh-market-root]` |
+| [`dsh-context-mobile`](packs/dsh-context-mobile/) | the context/cost panel | a 44px touch floor for `dsh-context` 0.79.x: granularity buttons, icon buttons, search/select and custom `role=button` rows; located through the plugin's own `data-lc-*` attributes, scoped by this pack's marker |
+| [`host-service-panel-mobile`](packs/host-service-panel-mobile/) | the host-observability panel | narrow-screen layout and a 44px touch floor for `dsh-host-service-panel` 0.7.x, scoped to `[data-dsh-hsp-root]` |
 
 Every pack is **experimental** and **off by default**. `catalog.json` records, per pack, what has actually been verified and what has not — the `evidence` field is meant to be read before trusting one.
 

@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "id": "dsh-context-mobile",
+  "name": "dsh-context Mobile Floor",
+  "version": "0.1.0",
+  "description": "上下文/成本面板（dsh-context）在手机上的触控下限：面板内按钮、自定义可点行、下拉与搜索框抬到 44px，输入框 16px 防聚焦缩放；只在该面板打开时生效。"
+}

@@ -51,16 +51,18 @@
     {
       "plugin": "dsh-context",
       "name": "上下文 / 成本面板",
-      "version": "0.78.0",
-      "verdict": "upstream",
+      "version": "0.79.0",
+      "verdict": "pack",
       "category": "usage",
-      "summary": "主面板 + composer overlay，已有容器查询；改造点集中在触控尺寸与 hover-only 提示。",
-      "mobile": "11px 控件、15px 搜索清除按钮、hover 才出现的提示；字体与命中区在手机上偏小。",
-      "evidence": "静态代码阅读（src/client/）；真机未验证。",
+      "summary": "主面板已适配触控下限（dsh-context-mobile，capabilities 仅 hit-target）；hover-only 提示在触屏仍不可达，仍需上游加 tap 入口。",
+      "mobile": "粒度按钮 11px 字号 / 约 17–22px 高（base.css:42）、设置胶囊约 24px（overview.css:8）、搜索框继承 13px（base.css:49-50）；定向 fixture 390×844 装包后按钮/行 44px、输入 44px + 16px。真实专用页未量。",
+      "evidence": "源码取证（npm dsh-context@0.79.0，client.js sha256 与安装副本一致；结构行号取 GitHub src/）+ check-pack 定向 fixture 全 PASS（42/0/1）；真机、专用页、composer overlay 未验证。",
       "links": {
         "repo": "https://github.com/bowenliang123/dsh-context",
         "npm": "dsh-context"
-      }
+      },
+      "range": ">=0.79.0 <0.80.0",
+      "pack": "dsh-context-mobile"
     },
     {
       "plugin": "dsh-purge",

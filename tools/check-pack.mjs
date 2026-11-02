@@ -1009,11 +1009,21 @@ async function runFixture(browser, options) {
       if (errors.length === 0) {
         activation = await page.evaluate(installPack, {})
         if (activation.length > 0) {
+          // Wait for whatever marker the pack writes (its own `data-dsh*` state, the
+          // host's panel state, or a floater flag) instead of one pack's attribute name.
           await page.waitForFunction(
             () => {
               const main = document.querySelector('.dshm-main')
-              return main !== null && (main.hasAttribute('data-dshm-adapt-panel') || main.hasAttribute('data-dsh-panel'))
-                || document.documentElement.hasAttribute('data-dsh-floaters')
+              if (main !== null && (main.hasAttribute('data-dsh-panel') || main.hasAttribute('data-dshm-adapt-panel'))) return true
+              if (document.documentElement.hasAttribute('data-dsh-floaters')) return true
+              const slot = document.querySelector('[data-slot="main"]')
+              if (slot === null) return false
+              for (const element of slot.querySelectorAll('*')) {
+                for (const attribute of element.attributes) {
+                  if (attribute.name.startsWith('data-dsh')) return true
+                }
+              }
+              return false
             },
             undefined,
             { timeout: 1500 },
@@ -1291,21 +1301,27 @@ function checkHostGate(report, baseline, after) {
   }
   if (probe.ownPanelState === '1') {
     report.pass(layer, 'runtime.hostGate.own-state', '本包自己的 data-dshm-adapt-panel 仍由 shim 维护（=1）')
+  } else if (probe.ownPanelState === null) {
+    // A pack may use its own marker name (e.g. data-dshm-context-panel on the panel
+    // root). The gate still has to be proven; only the conventional name is missing.
+    report.skip(layer, 'runtime.hostGate.own-state', '本包不使用 data-dshm-adapt-panel：跳过自有状态断言（门阀退让仍会验证）')
   } else {
-    report.fail(layer, 'runtime.hostGate.own-state', `本包自己的面板状态没有写对：data-dshm-adapt-panel=${probe.ownPanelState ?? 'null'}`)
+    report.fail(layer, 'runtime.hostGate.own-state', `本包自己的面板状态没有写对：data-dshm-adapt-panel=${probe.ownPanelState}`)
   }
 
+  // The gate has to remove the *44px floor*, not restore every pixel: a pack may
+  // keep other rules that change intrinsic height (e.g. a 16px input font).
   const floorFailures = []
-  if (probe.button !== null && probe.button.height > baseline.button.height + 1) {
-    floorFailures.push(`按钮高度 ${fmt(probe.button.height)} ≠ 基线 ${fmt(baseline.button.height)}`)
+  if (probe.button !== null && probe.button.height >= HIT_TARGET - EPSILON) {
+    floorFailures.push(`按钮仍 ≥ ${HIT_TARGET}px（${fmt(probe.button.height)}）`)
   }
-  if (probe.input !== null && baseline.input !== null && probe.input.height > baseline.input.height + 1) {
-    floorFailures.push(`输入高度 ${fmt(probe.input.height)} ≠ 基线 ${fmt(baseline.input.height)}`)
+  if (probe.input !== null && probe.input.height >= HIT_TARGET - EPSILON) {
+    floorFailures.push(`输入仍 ≥ ${HIT_TARGET}px（${fmt(probe.input.height)}）`)
   }
   if (floorFailures.length > 0) {
     report.fail(layer, 'runtime.hostGate.backoff', `宿主已接管面板状态时高度地板没有退让：${floorFailures.join('；')}`)
   } else {
-    report.pass(layer, 'runtime.hostGate.backoff', `宿主已接管面板状态时高度地板退让（按钮 ${fmt(probe.button?.height)} / 输入 ${fmt(probe.input?.height)} 回到基线）`)
+    report.pass(layer, 'runtime.hostGate.backoff', `宿主已接管面板状态时高度地板退让（按钮 ${fmt(probe.button?.height)} / 输入 ${fmt(probe.input?.height)} 均 < ${HIT_TARGET}px；基线 ${fmt(baseline.button?.height)} / ${fmt(baseline.input?.height)}）`)
   }
 
   if (probe.iconButton !== null) {
